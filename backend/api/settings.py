@@ -78,7 +78,7 @@ PER_USER_KEYS = {
     "telegram_bot_token", "telegram_chat_id", "telegram_enabled",
     "price_alerts_enabled", "price_alert_threshold",
     "gemini_api_key", "trainer_name", "portfolio_display_mode",
-    "openai_api_key", "pricecharting_api_token",
+    "openai_api_key", "pricecharting_api_token", "developer_api_key", "developer_api_key_created_at",
     SCANNER_PROVIDER_SETTING, *SCANNER_MODEL_SETTINGS.values(),
     *SCANNER_REQUEST_TIMEOUT_SETTINGS.values(),
     *SCANNER_CUSTOM_MODEL_SETTINGS.values(),
@@ -853,3 +853,22 @@ def set_setting(key: str, body: dict, db: Session = Depends(get_db), current_use
         _apply_setting_side_effect(db, *pending_side_effect)
     db.commit()
     return {"key": key, "value": value}
+
+
+@router.get("/developer-key/info")
+def get_developer_key(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from services.developer_api import get_user_api_key_info
+    return get_user_api_key_info(db, current_user.id)
+
+
+@router.post("/developer-key/generate")
+def generate_developer_key(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from services.developer_api import create_or_regenerate_api_key
+    return create_or_regenerate_api_key(db, current_user.id)
+
+
+@router.delete("/developer-key")
+def delete_developer_key(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from services.developer_api import revoke_api_key
+    revoke_api_key(db, current_user.id)
+    return {"success": True}

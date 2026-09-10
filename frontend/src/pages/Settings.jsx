@@ -19,6 +19,7 @@ import { useConfirmDialog } from '../contexts/ConfirmDialogContext'
 import Modal from '../components/ui/Modal'
 import AvatarPicker from '../components/AvatarPicker'
 import ScannerSettingsCard from '../components/ScannerSettingsCard'
+import DeveloperApiSettingsCard from '../components/DeveloperApiSettingsCard'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 import { TCGDEX_LANGUAGES, normalizeTcgdexLanguageCsv, tcgdexLanguageLabel } from '../utils/tcgdexLanguages'
@@ -1221,8 +1222,11 @@ export default function Settings() {
             </SettingsCard>
           </section>
 
-          {/* ── 7. EBAY API ── */}
-          
+          {/* ── 7. DEVELOPER API ── */}
+          <section className="space-y-1">
+            <SectionHeader title={t('settings.sectionDeveloperApi')} />
+            <DeveloperApiSettingsCard t={t} />
+          </section>
 
           {/* ── 8. ÜBER DIE APP ── */}
           <section className="space-y-1">

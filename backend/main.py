@@ -118,7 +118,7 @@ app.add_middleware(
     allow_origins=os.environ.get("CORS_ORIGINS", "").split(",") if os.environ.get("CORS_ORIGINS") else ["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 
@@ -202,6 +202,8 @@ app.include_router(public.router, prefix="/api/public", tags=["public"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(github_router, prefix="/api/github", tags=["github"])
 app.include_router(community.router, prefix="/api/community", tags=["community"])
+from api import developer
+app.include_router(developer.router, prefix="/api/v1", tags=["developer"])
 
 
 @app.get("/api/health")
