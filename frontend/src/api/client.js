@@ -382,6 +382,9 @@ export const testScannerConfiguration = (data) => api.post('/settings/scanner/te
 }).then(r => r.data)
 export const getTelegramStatus = () => api.get('/settings/telegram_status').then(r => r.data)
 export const deleteScanDiagnostics = () => api.delete('/settings/scan-diagnostics').then(r => r.data)
+export const getDeveloperKey = () => api.get('/settings/developer-key/info').then(r => r.data)
+export const generateDeveloperKey = () => api.post('/settings/developer-key/generate').then(r => r.data)
+export const revokeDeveloperKey = () => api.delete('/settings/developer-key').then(r => r.data)
 
 export const downloadDebugLog = () => {
   const token = localStorage.getItem('token')

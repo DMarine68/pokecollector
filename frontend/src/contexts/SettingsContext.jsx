@@ -214,7 +214,7 @@ export function SettingsProvider({ children }) {
   const msgs = loadedTranslations[lang] || en
 
   // Translation helper
-  const t = useCallback((path) => {
+  const t = useCallback((path, params) => {
     const parts = path.split('.')
     let val = msgs
     for (const part of parts) {
@@ -228,7 +228,14 @@ export function SettingsProvider({ children }) {
         fallback = fallback?.[part]
         if (fallback === undefined) break
       }
-      return fallback ?? path
+      val = fallback ?? path
+    }
+    if (params && typeof val === 'string') {
+      let res = val
+      for (const [k, v] of Object.entries(params)) {
+        res = res.replaceAll(`{${k}}`, v)
+      }
+      return res
     }
     return val
   }, [msgs])
