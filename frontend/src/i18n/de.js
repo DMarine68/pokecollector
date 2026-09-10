@@ -1160,6 +1160,7 @@ const de = {
     tcgLow: 'Niedrig',
     tcgMid: 'Mittel',
     collectionPosition: 'Sammlungsposition',
+    rawBaseline: 'Raw Baseline',
     multiplier: '{mult}× vs. Raw',
     return: 'Rendite',
     profit: 'Gewinn',

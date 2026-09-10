@@ -251,7 +251,7 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
         {card.price_source_lang && (
           <div className="flex items-center gap-2 rounded-lg border border-yellow/30 bg-yellow/10 px-3 py-1.5 text-xs text-yellow">
             <Info size={14} className="shrink-0" />
-            <span>{t('prices.priceFallbackNotice', { lang: card.price_source_lang.toUpperCase() })}</span>
+            <span>{t('prices.priceFallbackNotice', { lang: card.price_source_lang.toUpperCase() }).replace('{lang}', card.price_source_lang.toUpperCase())}</span>
           </div>
         )}
       </div>
@@ -329,11 +329,15 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
                 <p className="mt-2 text-sm font-black text-text-primary">
                   {grade.price != null ? formatUsdPrice(grade.price) : '—'}
                 </p>
-                {grade.multiplier != null && (
+                {grade.id === 'ungraded' ? (
                   <span className="mt-1 inline-block text-[10px] font-bold text-text-muted">
-                    {t('prices.multiplier', { mult: grade.multiplier })}
+                    {t('prices.rawBaseline')}
                   </span>
-                )}
+                ) : grade.multiplier != null ? (
+                  <span className="mt-1 inline-block text-[10px] font-bold text-text-muted">
+                    {t('prices.multiplier', { mult: grade.multiplier }).replace('{mult}', grade.multiplier)}
+                  </span>
+                ) : null}
               </div>
             )
           })}

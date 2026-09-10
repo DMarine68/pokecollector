@@ -6,8 +6,8 @@ import CardPricesTab from './CardPricesTab'
 vi.mock('../contexts/SettingsContext', () => ({
   useSettings: () => ({
     t: (key, params) => {
+      if (key === 'prices.multiplier') return '{mult}x vs raw'
       if (params?.lang) return `Price fallback from ${params.lang}`
-      if (params?.mult) return `${params.mult}x vs raw`
       return key
     },
     formatPrice: val => val != null ? `€${Number(val).toFixed(2)}` : '-',
@@ -88,6 +88,9 @@ describe('CardPricesTab', () => {
     expect(markup).toContain('Grade 9.5')
     expect(markup).toContain('PSA 10')
     expect(markup).toContain('$184.34')
+    expect(markup).toContain('9.98x vs raw')
+    expect(markup).toContain('prices.rawBaseline')
+    expect(markup).not.toContain('{mult}')
     expect(markup).toContain('https://www.pricecharting.com/search-products?type=prices&amp;q=Misty%27s+Vitality+111')
   })
 

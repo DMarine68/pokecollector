@@ -1174,6 +1174,7 @@ const en = {
     tcgLow: 'Low',
     tcgMid: 'Mid',
     collectionPosition: 'Collection Position',
+    rawBaseline: 'Raw Baseline',
     multiplier: '{mult}× vs raw',
     return: 'Return',
     profit: 'Gain',
