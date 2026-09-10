@@ -473,6 +473,8 @@ export default function Settings() {
   const [telegramBotTokenDirty, setTelegramBotTokenDirty] = useState(false)
   const [telegramChatId, setTelegramChatId] = useState('')
   const [telegramChatIdDirty, setTelegramChatIdDirty] = useState(false)
+  const [pricechartingApiToken, setPricechartingApiToken] = useState('')
+  const [pricechartingApiTokenDirty, setPricechartingApiTokenDirty] = useState(false)
 
 
   const { data: telegramBotTokenData } = useQuery({
@@ -483,6 +485,11 @@ export default function Settings() {
   const { data: telegramChatIdData } = useQuery({
     queryKey: ['setting', 'telegram_chat_id'],
     queryFn: () => getSetting('telegram_chat_id').catch(() => ({ value: '' })),
+  })
+
+  const { data: pricechartingApiTokenData } = useQuery({
+    queryKey: ['setting', 'pricecharting_api_token'],
+    queryFn: () => getSetting('pricecharting_api_token').catch(() => ({ value: '' })),
   })
 
   const { data: telegramStatus } = useQuery({
@@ -531,6 +538,12 @@ export default function Settings() {
   useEffect(() => {
     if (telegramChatIdData?.value !== undefined && !telegramChatIdDirty) setTelegramChatId(telegramChatIdData.value)
   }, [telegramChatIdData])
+
+  useEffect(() => {
+    if (pricechartingApiTokenData?.value !== undefined && !pricechartingApiTokenDirty) {
+      setPricechartingApiToken(pricechartingApiTokenData.value || '')
+    }
+  }, [pricechartingApiTokenData])
 
   // Sync mutation (full)
   const syncMutation = useMutation({
@@ -1368,7 +1381,7 @@ export default function Settings() {
                 </button>
               </SettingsRow>
               {user?.role === 'admin' && (
-                <SettingsRow label={t('settings.priceInterval')} description={t('settings.autoSmallSyncDesc')} last>
+                <SettingsRow label={t('settings.priceInterval')} description={t('settings.autoSmallSyncDesc')}>
                   <SelectControl
                     value={priceSyncIntervalMinutes}
                     options={[
@@ -1383,6 +1396,38 @@ export default function Settings() {
                   />
                 </SettingsRow>
               )}
+              <SettingsRow
+                label={t('settings.pricechartingToken')}
+                description={t('settings.pricechartingTokenDesc')}
+                last
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={pricechartingApiToken}
+                    onChange={e => { setPricechartingApiToken(e.target.value); setPricechartingApiTokenDirty(true) }}
+                    placeholder="t=..."
+                    className="input text-xs font-mono"
+                    style={{ minWidth: 0, width: 180 }}
+                  />
+                  {pricechartingApiToken && !pricechartingApiTokenDirty && (
+                    <span className="text-xs text-green flex-shrink-0">✅</span>
+                  )}
+                  {pricechartingApiTokenDirty && (
+                    <button
+                      onClick={async () => {
+                        await saveSetting('pricecharting_api_token', pricechartingApiToken)
+                        setPricechartingApiTokenDirty(false)
+                        queryClient.invalidateQueries({ queryKey: ['setting', 'pricecharting_api_token'] })
+                        queryClient.invalidateQueries({ queryKey: ['pricecharting'] })
+                      }}
+                      className="btn-primary-sm flex-shrink-0"
+                    >
+                      {t('common.save')}
+                    </button>
+                  )}
+                </div>
+              </SettingsRow>
             </SettingsCard>
           </section>
 

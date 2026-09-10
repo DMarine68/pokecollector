@@ -78,7 +78,7 @@ PER_USER_KEYS = {
     "telegram_bot_token", "telegram_chat_id", "telegram_enabled",
     "price_alerts_enabled", "price_alert_threshold",
     "gemini_api_key", "trainer_name", "portfolio_display_mode",
-    "openai_api_key",
+    "openai_api_key", "pricecharting_api_token",
     SCANNER_PROVIDER_SETTING, *SCANNER_MODEL_SETTINGS.values(),
     *SCANNER_REQUEST_TIMEOUT_SETTINGS.values(),
     *SCANNER_CUSTOM_MODEL_SETTINGS.values(),

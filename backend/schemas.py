@@ -93,6 +93,8 @@ class CardBase(BaseModel):
     variants_reverse: Optional[bool] = None
     variants_holo: Optional[bool] = None
     variants_first_edition: Optional[bool] = None
+    last_price_sync_success_at: Optional[datetime] = None
+    cardmarket_products: Optional[Any] = None
 
     class Config:
         from_attributes = True
@@ -230,6 +232,35 @@ class PriceHistoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PriceChartingGrade(BaseModel):
+    id: str
+    name: str
+    label: str
+    price: Optional[float] = None
+    multiplier: Optional[float] = None
+    is_psa10: bool = False
+
+
+class PriceChartingResponse(BaseModel):
+    card_id: str
+    card_name: str
+    card_number: Optional[str] = None
+    set_name: Optional[str] = None
+    search_url: str
+    direct_url: Optional[str] = None
+    source: str
+    has_live_data: bool
+    is_estimate: bool
+    currency: str = "USD"
+    ungraded: Optional[float] = None
+    grade_7: Optional[float] = None
+    grade_8: Optional[float] = None
+    grade_9: Optional[float] = None
+    grade_9_5: Optional[float] = None
+    psa_10: Optional[float] = None
+    grades: List[PriceChartingGrade] = Field(default_factory=list)
 
 
 class BinderCreate(BaseModel):

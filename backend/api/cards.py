@@ -7,8 +7,9 @@ from typing import Optional, List
 from api.auth import get_current_user
 from database import get_db
 from models import Binder, BinderCard, Card, Set, PriceHistory, CustomCardMatch, CollectionItem, WishlistItem, User, ImageCache, ProductCard, ProductLedgerEntry, TradeItem
-from schemas import CardBase, CardWithSet, PriceHistoryResponse, CardCustomCreate, CustomCardUpdate, CardCustomImageUpdate
+from schemas import CardBase, CardWithSet, PriceHistoryResponse, PriceChartingResponse, CardCustomCreate, CustomCardUpdate, CardCustomImageUpdate
 from services import pokemon_api
+from services.pricecharting import get_card_pricecharting_data
 from services.card_fallbacks import (
     apply_cross_language_fallbacks,
     build_missing_language_card,
@@ -117,10 +118,19 @@ def _card_to_dict(card: Card, current_user_id: int | None = None) -> dict:
         "price_avg7_holo": getattr(card, 'price_avg7_holo', None),
         "price_avg30_holo": getattr(card, 'price_avg30_holo', None),
         # TCGPlayer
+        "price_tcg_normal_low": getattr(card, 'price_tcg_normal_low', None),
+        "price_tcg_normal_mid": getattr(card, 'price_tcg_normal_mid', None),
+        "price_tcg_normal_high": getattr(card, 'price_tcg_normal_high', None),
         "price_tcg_normal_market": getattr(card, 'price_tcg_normal_market', None),
+        "price_tcg_reverse_low": getattr(card, 'price_tcg_reverse_low', None),
+        "price_tcg_reverse_mid": getattr(card, 'price_tcg_reverse_mid', None),
         "price_tcg_reverse_market": getattr(card, 'price_tcg_reverse_market', None),
+        "price_tcg_holo_low": getattr(card, 'price_tcg_holo_low', None),
+        "price_tcg_holo_mid": getattr(card, 'price_tcg_holo_mid', None),
         "price_tcg_holo_market": getattr(card, 'price_tcg_holo_market', None),
         "price_source_lang": getattr(card, "price_source_lang", None),
+        "last_price_sync_success_at": getattr(card, "last_price_sync_success_at", None),
+        "cardmarket_products": getattr(card, "cardmarket_products", None),
         "variants_normal": getattr(card, "variants_normal", None),
         "variants_reverse": getattr(card, "variants_reverse", None),
         "variants_holo": getattr(card, "variants_holo", None),
@@ -1012,6 +1022,23 @@ def get_price_history(
         .all()
     )
     return history
+
+
+@router.get("/{card_id}/pricecharting", response_model=PriceChartingResponse)
+def get_card_pricecharting(
+    card_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get PriceCharting graded price cross-comparison for a specific card."""
+    card = db.query(Card).filter(
+        Card.id == card_id,
+        visible_any_card_filter(db, current_user.id, "all"),
+    ).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    return get_card_pricecharting_data(db, current_user, card)
 
 
 @router.put("/{card_id}/custom-image", response_model=CardBase)

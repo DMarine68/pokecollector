@@ -12,6 +12,7 @@ import { CardDialog, CardLegend, withCollectionItemState } from '../components/c
 import { CollectionCardDisplay, CollectionCardIdentity, CollectionCardRow, OwnPhotoOverlayBadge, useCollectionPhotoUrl } from '../components/CollectionCardImage'
 import MoneyInput from '../components/MoneyInput'
 import TabNav from '../components/TabNav'
+import CardPricesTab from '../components/CardPricesTab'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { cardImageUrl, hasCatalogueImage, resolveCardImageUrl } from '../utils/imageUrl'
@@ -643,20 +644,7 @@ function CollectionEditModal({ item, onClose }) {
       )}
 
       {activeTab === 'prices' && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-bg-card p-3">
-            <p className="text-xs text-text-muted">{t('collection.marketPrice')}</p>
-            <p className="mt-1 text-xl font-black text-green">{marketPrice > 0 ? formatPrice(marketPrice) : '—'}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-bg-card p-3">
-            <p className="text-xs text-text-muted">{t('collection.buyPrice')}</p>
-            <p className="mt-1 text-xl font-black text-text-primary">{item.purchase_price ? formatPrice(item.purchase_price) : '—'}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-bg-card p-3">
-            <p className="text-xs text-text-muted">{t('collection.totalVal')}</p>
-            <p className="mt-1 text-xl font-black text-text-primary">{marketPrice > 0 ? formatPrice(marketPrice * item.quantity) : '—'}</p>
-          </div>
-        </div>
+        <CardPricesTab card={card} variant={item.variant} collectionItem={item} />
       )}
 
       {activeTab === 'owned' && (

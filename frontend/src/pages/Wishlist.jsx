@@ -5,6 +5,7 @@ import { getWishlist, removeFromWishlist, updateWishlistItem, addToCollection } 
 import { useSettings } from '../contexts/SettingsContext'
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext'
 import { CardDialog, CardIdentity, CardRow, getCardSetNumber } from '../components/card-system'
+import CardPricesTab from '../components/CardPricesTab'
 import TabNav from '../components/TabNav'
 import toast from 'react-hot-toast'
 import { resolveCardImageUrl } from '../utils/imageUrl'
@@ -101,10 +102,7 @@ function WishlistCardModal({ item, onClose, onAddToCollection, onRemove }) {
         </div>
       )}
       {activeTab === 'prices' && (
-        <div className="rounded-xl border border-border bg-bg-card p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('wishlist.marketPrice')}</p>
-          <p className="mt-2 text-2xl font-black text-green">{price > 0 ? formatPrice(price) : '—'}</p>
-        </div>
+        <CardPricesTab card={card} variant="Normal" />
       )}
       {activeTab === 'wishlist' && (
         <div className="space-y-4">
