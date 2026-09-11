@@ -43,6 +43,9 @@ class _FakeCollectionDb:
     def commit(self):
         pass
 
+    def flush(self):
+        pass
+
     def refresh(self, item):
         pass
 
@@ -134,9 +137,10 @@ class TcgdexLanguageApiValidationTests(unittest.TestCase):
         self.assertEqual(item.lang, "en")  # schema default, not overridden by the caller
 
         with patch("api.collection.ensure_card_exists") as ensure_card_exists_mock:
-            result = _add_collection_item(fake_db, user, item)
+            result, added_item = _add_collection_item(fake_db, user, item)
 
         self.assertEqual(result, "added")
+        self.assertIs(added_item, fake_db.added[0])
         ensure_card_exists_mock.assert_called_once_with(fake_db, "PMCG3-031_ja", lang="ja")
         self.assertEqual(fake_db.added[0].card_id, "PMCG3-031_ja")
         self.assertEqual(fake_db.added[0].lang, "ja")
@@ -200,7 +204,7 @@ class TcgdexLanguageApiValidationTests(unittest.TestCase):
 
         csv_db = _FakeCollectionDb()
         with patch("api.collection.ensure_card_exists") as csv_ensure:
-            status = _add_collection_item(
+            status, added_item = _add_collection_item(
                 csv_db,
                 user,
                 CollectionItemCreate(card_id="card-1_pt-br", quantity=1),
@@ -208,6 +212,7 @@ class TcgdexLanguageApiValidationTests(unittest.TestCase):
             )
         csv_ensure.assert_called_once_with(csv_db, "card-1_pt-br", lang="pt-br")
         self.assertEqual(status, "added")
+        self.assertIs(added_item, csv_db.added[0])
         self.assertEqual((csv_db.added[0].card_id, csv_db.added[0].lang), ("card-1_pt-br", "pt-br"))
 
 

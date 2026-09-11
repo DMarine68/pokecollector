@@ -12,9 +12,11 @@ try:
     from sqlalchemy.orm import sessionmaker
 
     from api.products import (
+        add_product_book_cards,
         bulk_update_product_lifecycle,
         create_product,
         create_product_batch,
+        create_product_book,
         delete_product,
         get_products_summary,
         link_collection_item_to_product,
@@ -30,6 +32,9 @@ try:
     from services.product_images import product_image_cache_key, product_image_token
     from schemas import (
         CollectionItemUpdate,
+        ProductBookCardCreate,
+        ProductBookCardsCreate,
+        ProductBookCreate,
         ProductCardLinkCreate,
         ProductCardBulkLinkCreate,
         ProductCardSaleCreate,
@@ -983,6 +988,97 @@ class ProductLedgerApiTests(unittest.TestCase):
         self.assertEqual(product_card.card_id, custom_card.id)
         self.assertEqual(product_card.active_quantity, 1)
         self.assertIsNotNone(self.db.query(Card).filter(Card.id == custom_card.id).first())
+
+    def test_product_book_with_catalogue_cards_creates_collection_and_links(self):
+        response = create_product_book(
+            ProductBookCreate(
+                product=ProductPurchaseCreate(
+                    product_name="Prismatic ETB",
+                    product_type="Elite Trainer Box",
+                    purchase_price=50,
+                    purchase_date=datetime.date(2026, 5, 30),
+                    lifecycle_status="sealed",
+                ),
+                cards=[ProductBookCardCreate(card_id=self.card.id, quantity=2)],
+            ),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        collection_item = self.db.query(CollectionItem).one()
+        product_card = self.db.query(ProductCard).one()
+        self.assertEqual(response.lifecycle_status, "opened")
+        self.assertEqual(response.value_source, "linked_cards")
+        self.assertEqual(response.computed_current_value, 20)
+        self.assertEqual(response.pnl, -30)
+        self.assertEqual(collection_item.quantity, 2)
+        self.assertIsNone(collection_item.purchase_price)
+        self.assertEqual(product_card.active_quantity, 2)
+        self.assertEqual(product_card.collection_item_id, collection_item.id)
+
+    def test_empty_product_book_creates_sealed_product(self):
+        response = create_product_book(
+            ProductBookCreate(
+                product=ProductPurchaseCreate(
+                    product_name="Sealed Tin",
+                    product_type="Tin",
+                    purchase_price=25,
+                    current_value=30,
+                    purchase_date=datetime.date(2026, 5, 30),
+                ),
+                cards=[],
+            ),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        self.assertEqual(response.lifecycle_status, "sealed")
+        self.assertEqual(response.value_source, "manual_current")
+        self.assertEqual(response.computed_current_value, 30)
+        self.assertEqual(self.db.query(CollectionItem).count(), 0)
+        self.assertEqual(self.db.query(ProductCard).count(), 0)
+
+    def test_product_book_unknown_card_leaves_no_product_or_collection(self):
+        with patch("api.products.ensure_card_exists", side_effect=HTTPException(status_code=404, detail="Card missing")):
+            with self.assertRaises(HTTPException) as ctx:
+                create_product_book(
+                    ProductBookCreate(
+                        product=ProductPurchaseCreate(
+                            product_name="Failed Box",
+                            product_type="Booster Box",
+                            purchase_price=120,
+                            purchase_date=datetime.date(2026, 5, 30),
+                        ),
+                        cards=[ProductBookCardCreate(card_id="missing-card_en", quantity=1)],
+                    ),
+                    current_user=self.user,
+                    db=self.db,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(self.db.query(ProductPurchase).count(), 0)
+        self.assertEqual(self.db.query(CollectionItem).count(), 0)
+        self.assertEqual(self.db.query(ProductCard).count(), 0)
+
+    def test_book_cards_adds_catalogue_cards_to_existing_product(self):
+        product = self.add_product(purchase_price=40)
+
+        response = add_product_book_cards(
+            product.id,
+            ProductBookCardsCreate(cards=[ProductBookCardCreate(card_id=self.card.id, quantity=1)]),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        self.db.refresh(product)
+        collection_item = self.db.query(CollectionItem).one()
+        self.assertEqual(response.lifecycle_status, "opened")
+        self.assertEqual(response.value_source, "linked_cards")
+        self.assertEqual(response.computed_current_value, 10)
+        self.assertEqual(response.pnl, -30)
+        self.assertEqual(product.lifecycle_status, "opened")
+        self.assertEqual(collection_item.quantity, 1)
+        self.assertIsNone(collection_item.purchase_price)
 
 
 if __name__ == "__main__":
