@@ -359,6 +359,23 @@ class ProductCardBulkLinkCreate(BaseModel):
     items: List[ProductCardLinkCreate] = Field(min_length=1, max_length=200)
 
 
+class ProductBookCardCreate(BaseModel):
+    card_id: str
+    quantity: int = Field(default=1, ge=1, le=999)
+    condition: str = "NM"
+    variant: Optional[str] = "Normal"
+    lang: str = "en"
+
+
+class ProductBookCreate(BaseModel):
+    product: ProductPurchaseCreate
+    cards: List[ProductBookCardCreate] = Field(default_factory=list, max_length=200)
+
+
+class ProductBookCardsCreate(BaseModel):
+    cards: List[ProductBookCardCreate] = Field(min_length=1, max_length=200)
+
+
 class ProductCardSaleCreate(BaseModel):
     quantity: int = Field(default=1, ge=1, le=999)
     sold_price: float = Field(ge=0)

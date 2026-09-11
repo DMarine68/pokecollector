@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, Cell
 } from 'recharts'
 import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, Package, Check, X, SortAsc, Filter, ChevronUp, ChevronDown, Link2, DollarSign, History, AlertCircle, Search, ExternalLink } from 'lucide-react'
-import { getProducts, createProductBatch, updateProduct, bulkUpdateProductLifecycle, deleteProduct, getProductsSummary, getCollection, linkProductCards, unlinkProductCard, sellProductCard, addProductLedgerEntry, getApiErrorMessage } from '../api/client'
+import { getProducts, createProductBook, addProductBookCards, updateProduct, bulkUpdateProductLifecycle, deleteProduct, getProductsSummary, getCollection, linkProductCards, unlinkProductCard, sellProductCard, addProductLedgerEntry, getApiErrorMessage } from '../api/client'
 import { useSettings } from '../contexts/SettingsContext'
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext'
 import { CardRow } from '../components/card-system'
@@ -13,6 +13,7 @@ import CollectionCardImage from '../components/CollectionCardImage'
 import MoneyInput from '../components/MoneyInput'
 import PeriodSelector, { PRODUCT_PERIODS, getPeriodCutoff } from '../components/PeriodSelector'
 import AnalyticsSectionNav from '../components/AnalyticsSectionNav'
+import PurchaseBookWizard, { ExistingPurchaseBookModal } from '../components/PurchaseBookWizard'
 import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -494,15 +495,21 @@ function ProductLedgerPanel({
   onUnlink,
   onSell,
   onFlatGain,
+  onBookCards,
   loading,
   linkPickerOpen,
   onLinkPickerOpenChange,
+  cataloguePickerOpen,
+  onCataloguePickerOpenChange,
 }) {
   const { exchangeRate, exchangeRateReady } = useSettings()
   const today = new Date().toISOString().split('T')[0]
   const [internalLinkPickerOpen, setInternalLinkPickerOpen] = useState(false)
+  const [internalCataloguePickerOpen, setInternalCataloguePickerOpen] = useState(false)
   const isLinkPickerOpen = linkPickerOpen ?? internalLinkPickerOpen
   const setLinkPickerOpen = onLinkPickerOpenChange ?? setInternalLinkPickerOpen
+  const isCataloguePickerOpen = cataloguePickerOpen ?? internalCataloguePickerOpen
+  const setCataloguePickerOpen = onCataloguePickerOpenChange ?? setInternalCataloguePickerOpen
   const [saleForms, setSaleForms] = useState({})
   const [flatGain, setFlatGain] = useState({ amount: '', event_date: today, notes: '' })
   const linkedByItem = useMemo(() => linkedActiveQuantityByCollectionItem(products), [products])
@@ -583,10 +590,16 @@ function ProductLedgerPanel({
           <p className="text-sm font-medium text-text-primary">{t('products.linkOwnedCards')}</p>
           <p className="text-xs text-text-muted">{t('products.linkOwnedCardsHelp')}</p>
         </div>
-        <button disabled={!availableCollectionItems.length || loading} onClick={() => setLinkPickerOpen(true)} className="btn-primary w-full sm:w-auto">
-          <Link2 size={14} /> {t('products.selectCards')}
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button disabled={loading} onClick={() => setCataloguePickerOpen(true)} className="btn-ghost w-full sm:w-auto">
+            <Search size={14} /> {t('products.addCatalogueCards')}
+          </button>
+          <button disabled={!availableCollectionItems.length || loading} onClick={() => setLinkPickerOpen(true)} className="btn-primary w-full sm:w-auto">
+            <Link2 size={14} /> {t('products.selectCards')}
+          </button>
+        </div>
       </div>
+      <p className="text-xs text-text-muted">{t('products.addCatalogueCardsHelp')}</p>
 
       <ProductCardPicker
         isOpen={isLinkPickerOpen}
@@ -597,6 +610,17 @@ function ProductLedgerPanel({
         t={t}
         onLink={onLink}
         loading={loading}
+      />
+
+      <ExistingPurchaseBookModal
+        isOpen={isCataloguePickerOpen}
+        onClose={() => setCataloguePickerOpen(false)}
+        product={product}
+        loading={loading}
+        onSubmit={async (cards) => {
+          await onBookCards(product.id, cards)
+          setCataloguePickerOpen(false)
+        }}
       />
 
       {(product.product_cards || []).length > 0 ? (
@@ -700,12 +724,15 @@ function ProductCardsModal({
   onUnlink,
   onSell,
   onFlatGain,
+  onBookCards,
   loading,
 }) {
   const [linkPickerOpen, setLinkPickerOpen] = useState(false)
+  const [cataloguePickerOpen, setCataloguePickerOpen] = useState(false)
 
   useEffect(() => {
     setLinkPickerOpen(false)
+    setCataloguePickerOpen(false)
   }, [product?.id])
 
   if (!product) return null
@@ -714,11 +741,11 @@ function ProductCardsModal({
     <Modal
       isOpen
       onClose={() => {
-        if (!linkPickerOpen) onClose()
+        if (!linkPickerOpen && !cataloguePickerOpen) onClose()
       }}
       title={t('products.cardsFor').replace('{product}', product.product_name)}
       size="xl"
-      isObscured={linkPickerOpen}
+      isObscured={linkPickerOpen || cataloguePickerOpen}
     >
       <ProductLedgerPanel
         product={product}
@@ -729,10 +756,13 @@ function ProductCardsModal({
         loading={loading}
         linkPickerOpen={linkPickerOpen}
         onLinkPickerOpenChange={setLinkPickerOpen}
+        cataloguePickerOpen={cataloguePickerOpen}
+        onCataloguePickerOpenChange={setCataloguePickerOpen}
         onLink={onLink}
         onUnlink={onUnlink}
         onSell={onSell}
         onFlatGain={onFlatGain}
+        onBookCards={onBookCards}
       />
     </Modal>
   )
@@ -778,17 +808,22 @@ export default function Products() {
   }
 
   const createMutation = useMutation({
-    mutationFn: createProductBatch,
-    onSuccess: (response) => {
-      toast.success(
-        response.data.length === 1
-          ? t('products.added')
-          : t('products.addedCount').replace('{count}', response.data.length),
-      )
+    mutationFn: createProductBook,
+    onSuccess: () => {
+      toast.success(t('products.added'))
       invalidateProducts()
       setCreating(false)
     },
     onError: (error) => toast.error(getApiErrorMessage(error, t('products.addFailed'))),
+  })
+
+  const bookCardsMutation = useMutation({
+    mutationFn: ({ productId, cards }) => addProductBookCards(productId, { cards }),
+    onSuccess: (_response, variables) => {
+      toast.success(t('products.cardsLinked').replace('{count}', variables.cards.length))
+      invalidateProducts()
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, t('products.cardLinkFailed'))),
   })
 
   const updateMutation = useMutation({
@@ -1435,22 +1470,12 @@ export default function Products() {
         </div>
       )}
 
-      <Modal
+      <PurchaseBookWizard
         isOpen={creating}
-        onClose={() => {
-          if (!createMutation.isPending) setCreating(false)
-        }}
-        title={t('products.logNew')}
-        size="lg"
-      >
-        <div className="p-4 sm:p-5">
-          <ProductForm
-            onSubmit={(data) => createMutation.mutate(data)}
-            onCancel={() => setCreating(false)}
-            loading={createMutation.isPending}
-          />
-        </div>
-      </Modal>
+        onClose={() => setCreating(false)}
+        onSubmit={(data) => createMutation.mutate(data)}
+        loading={createMutation.isPending}
+      />
 
       <Modal
         isOpen={Boolean(editingProduct)}
@@ -1480,11 +1505,12 @@ export default function Products() {
         formatPrice={formatPrice}
         t={t}
         onClose={() => setCardProductId(null)}
-        loading={linkCardsMutation.isPending || unlinkCardMutation.isPending || sellCardMutation.isPending || flatGainMutation.isPending}
+        loading={linkCardsMutation.isPending || unlinkCardMutation.isPending || sellCardMutation.isPending || flatGainMutation.isPending || bookCardsMutation.isPending}
         onLink={(productId, items) => linkCardsMutation.mutateAsync({ productId, items })}
         onUnlink={(productId, productCardId) => unlinkCardMutation.mutateAsync({ productId, productCardId })}
         onSell={(productId, productCardId, data) => sellCardMutation.mutateAsync({ productId, productCardId, data })}
         onFlatGain={(productId, data) => flatGainMutation.mutateAsync({ productId, data })}
+        onBookCards={(productId, cards) => bookCardsMutation.mutateAsync({ productId, cards })}
       />
 
       {/* By Type Breakdown */}

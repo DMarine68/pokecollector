@@ -113,11 +113,13 @@ Custom cards belong to exactly one user. Owners may publish a card as a shared t
 | GET | `/api/products/types` | Product type suggestions |
 | GET | `/api/products/` | Product list |
 | POST | `/api/products/` | Create product |
+| POST | `/api/products/book` | Create a product and add/link catalogue cards in one transaction |
 | PUT | `/api/products/{product_id}` | Update product |
 | DELETE | `/api/products/{product_id}` | Delete product |
 | GET | `/api/products/summary` | Product summary |
 | GET | `/api/products/{product_id}` | Product detail |
 | POST | `/api/products/{product_id}/cards` | Link collection cards to product |
+| POST | `/api/products/{product_id}/book-cards` | Add catalogue cards to an existing product and link them |
 | DELETE | `/api/products/{product_id}/cards/{product_card_id}` | Unlink product card |
 | POST | `/api/products/{product_id}/cards/{product_card_id}/sell` | Record product-card sale |
 | POST | `/api/products/{product_id}/ledger` | Add product ledger entry |

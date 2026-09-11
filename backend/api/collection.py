@@ -260,8 +260,13 @@ def ensure_card_exists(
     return card
 
 
-def _add_collection_item(db: Session, current_user: User, item: CollectionItemCreate, commit: bool = True) -> str:
-    """Add one item and return "added" or "updated"."""
+def _add_collection_item(
+    db: Session,
+    current_user: User,
+    item: CollectionItemCreate,
+    commit: bool = True,
+) -> tuple[str, CollectionItem]:
+    """Add one item and return ("added"|"updated", collection_item)."""
     item_lang = _collection_item_language(item.card_id, item.lang)
     item_variant = _normalize_collection_variant(item.variant)
 
@@ -292,9 +297,11 @@ def _add_collection_item(db: Session, current_user: User, item: CollectionItemCr
         existing.quantity += item.quantity or 1
         if commit:
             db.commit()
-        return "updated"
+        else:
+            db.flush()
+        return "updated", existing
 
-    db.add(CollectionItem(
+    db_item = CollectionItem(
         card_id=effective_card_id,
         quantity=item.quantity,
         condition=item.condition,
@@ -303,10 +310,14 @@ def _add_collection_item(db: Session, current_user: User, item: CollectionItemCr
         lang=item_lang,
         user_id=current_user.id,
         added_at=datetime.datetime.utcnow(),
-    ))
+    )
+    db.add(db_item)
     if commit:
         db.commit()
-    return "added"
+        db.refresh(db_item)
+    else:
+        db.flush()
+    return "added", db_item
 
 
 def _get_api_sets_by_code(include_digital: bool = False) -> dict[str, List[dict]]:
@@ -731,7 +742,7 @@ async def import_collection_csv(
 
     for item in validated_items.values():
         try:
-            status = _add_collection_item(db, current_user, item, commit=False)
+            status, _collection_item = _add_collection_item(db, current_user, item, commit=False)
             if status == "added":
                 added += 1
             else:

@@ -9,9 +9,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from api.auth import get_current_user
+from api.collection import _add_collection_item, _collection_item_language, ensure_card_exists
 from database import get_db
 from models import Card, CollectionItem, ProductCard, ProductLedgerEntry, ProductPurchase, User
 from schemas import (
+    CollectionItemCreate,
+    ProductBookCardCreate,
+    ProductBookCardsCreate,
+    ProductBookCreate,
     ProductCardBulkLinkCreate,
     ProductCardLinkCreate,
     ProductCardResponse,
@@ -24,6 +29,7 @@ from schemas import (
     ProductPurchaseResponse,
     ProductPurchaseUpdate,
 )
+from services import pokemon_api
 from services.card_values import normalize_price_field
 from services.binder_allocations import collection_item_allocated_quantity
 from services.image_url_security import validate_public_https_image_url
@@ -45,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 PRODUCT_TYPES = ["Booster Pack", "Booster Box", "Elite Trainer Box", "Tin", "Bundle", "Collection Box", "Blister", "Other"]
 PRODUCT_LINK_MAX_QUANTITY = 999
+PRODUCT_BOOK_MAX_CARDS = 200
 
 
 def _normalize_image_url(value: str | None) -> str | None:
@@ -403,6 +410,78 @@ def _link_collection_items(
     product.lifecycle_status = "opened"
 
 
+def _merge_book_cards(cards: list[ProductBookCardCreate]) -> list[ProductBookCardCreate]:
+    """Collapse identical catalogue lines so one collection row is linked once."""
+    merged: dict[tuple[str, str, str, str], ProductBookCardCreate] = {}
+    for card in cards:
+        key = (
+            card.card_id,
+            card.condition,
+            card.variant or "Normal",
+            card.lang,
+        )
+        existing = merged.get(key)
+        if existing:
+            merged[key] = existing.model_copy(update={"quantity": existing.quantity + card.quantity})
+            continue
+        merged[key] = card
+    return list(merged.values())
+
+
+def _ensure_book_cards_exist(db: Session, current_user: User, cards: list[ProductBookCardCreate]) -> None:
+    """Resolve catalogue cards before mutating product inventory."""
+    for card in cards:
+        item_lang = _collection_item_language(card.card_id, card.lang)
+        if card.card_id.startswith("custom-"):
+            custom_card = db.query(Card).filter(Card.id == card.card_id).first()
+            if not custom_card or custom_card.custom_owner_id != current_user.id:
+                if custom_card and custom_card.is_shared_template:
+                    raise HTTPException(status_code=409, detail="Copy this shared template before adding it.")
+                raise HTTPException(status_code=404, detail="Custom card not found")
+            continue
+        tcg_card_id, _ = pokemon_api.strip_lang_suffix(card.card_id)
+        ensure_card_exists(db, f"{tcg_card_id}_{item_lang}", lang=item_lang)
+
+
+def _add_and_link_book_cards(
+    db: Session,
+    current_user: User,
+    product: ProductPurchase,
+    cards: list[ProductBookCardCreate],
+) -> None:
+    """Add catalogue cards to collection with no per-card cost, then link them."""
+    if len(cards) > PRODUCT_BOOK_MAX_CARDS:
+        raise HTTPException(status_code=422, detail=f"cards cannot exceed {PRODUCT_BOOK_MAX_CARDS} lines")
+
+    merged = _merge_book_cards(cards)
+    links_by_item_id: dict[int, int] = {}
+    for card in merged:
+        _status, collection_item = _add_collection_item(
+            db,
+            current_user,
+            CollectionItemCreate(
+                card_id=card.card_id,
+                quantity=card.quantity,
+                condition=card.condition,
+                variant=card.variant,
+                purchase_price=None,
+                lang=card.lang,
+            ),
+            commit=False,
+        )
+        links_by_item_id[collection_item.id] = links_by_item_id.get(collection_item.id, 0) + card.quantity
+
+    _link_collection_items(
+        db,
+        current_user,
+        product,
+        [
+            ProductCardLinkCreate(collection_item_id=item_id, quantity=quantity)
+            for item_id, quantity in links_by_item_id.items()
+        ],
+    )
+
+
 def _refresh_product_response(db: Session, current_user: User, product: ProductPurchase, price_field: str) -> ProductPurchaseResponse:
     product_cards = _load_product_cards(db, current_user, product.id)
     flat_ledger_entries = _load_flat_ledger_entries(db, current_user, product.id)
@@ -536,6 +615,52 @@ def create_product_batch(
     for db_product in products:
         db.refresh(db_product)
     return [_product_response(db_product, [], [], "price_trend") for db_product in products]
+
+
+@router.post("/book", response_model=ProductPurchaseResponse)
+def create_product_book(
+    payload: ProductBookCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+):
+    """Create a product and optionally add catalogue cards to its book in one transaction."""
+    product = payload.product
+    cards = list(payload.cards or [])
+    _validate_product_payload(product)
+    _validate_whole_product_sale(product)
+    has_sale = product_has_completed_sale(product)
+    if cards and has_sale:
+        raise HTTPException(status_code=409, detail="A sold sealed product cannot have cards linked to it")
+    if has_sale and product.lifecycle_status == "opened":
+        raise HTTPException(status_code=409, detail="An opened product cannot also be sold as a sealed product")
+    if cards and product.lifecycle_status == "sealed":
+        product = product.model_copy(update={"lifecycle_status": "opened"})
+
+    merged = _merge_book_cards(cards)
+    if merged:
+        _ensure_book_cards_exist(db, current_user, merged)
+
+    image_url = _normalize_image_url(product.image_url)
+    cardmarket_url = _normalize_cardmarket_url(product.cardmarket_url)
+    db_product = _new_product_purchase(
+        product,
+        user_id=current_user.id,
+        created_at=datetime.datetime.utcnow(),
+        image_url=image_url,
+        cardmarket_url=cardmarket_url,
+    )
+    try:
+        db.add(db_product)
+        db.flush()
+        if merged:
+            _add_and_link_book_cards(db, current_user, db_product, merged)
+        db.commit()
+        db.refresh(db_product)
+    except Exception:
+        db.rollback()
+        raise
+    return _refresh_product_response(db, current_user, db_product, normalize_price_field(price_field))
 
 
 @router.put("/lifecycle/bulk")
@@ -802,6 +927,32 @@ def link_collection_items_to_product(
 
     db.commit()
     db.refresh(product)
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+
+
+@router.post("/{product_id}/book-cards", response_model=ProductPurchaseResponse)
+def add_product_book_cards(
+    product_id: int,
+    payload: ProductBookCardsCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+):
+    """Add catalogue cards to an existing product book and link them."""
+    product = _get_product_or_404(db, current_user, product_id, lock=True)
+    has_activity = _product_has_activity(db, current_user, product.id)
+    if product_lifecycle_status(product, has_activity) == "sold":
+        raise HTTPException(status_code=409, detail="A sold sealed product cannot have cards linked to it")
+
+    merged = _merge_book_cards(list(payload.cards))
+    try:
+        _ensure_book_cards_exist(db, current_user, merged)
+        _add_and_link_book_cards(db, current_user, product, merged)
+        db.commit()
+        db.refresh(product)
+    except Exception:
+        db.rollback()
+        raise
     return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
 
 
