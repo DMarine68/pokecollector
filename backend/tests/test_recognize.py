@@ -246,6 +246,34 @@ class RecognizeCardNumberTests(unittest.TestCase):
         self.assertEqual((legacy["number_local"], legacy["number_total"]), ("136", "182"))
         self.assertEqual(split["number"], "063/100")
 
+    def test_discards_explicit_pokedex_references_from_either_number_field(self):
+        for card_info in (
+            {"number_local": "No. 0094"},
+            {"number_local": "no94"},
+            {"number_local": "NO.152"},
+            {"number": "No. 0156"},
+        ):
+            with self.subTest(card_info=card_info):
+                normalized = normalize_recognized_card_info(card_info)
+                self.assertIsNone(normalized["number_local"])
+                self.assertIsNone(normalized["number"])
+
+    def test_preserves_bare_collector_numbers_regardless_of_magnitude(self):
+        for number in ("030", "094", "226"):
+            with self.subTest(number=number):
+                normalized = normalize_recognized_card_info({"number_local": number})
+                self.assertEqual(normalized["number_local"], number)
+                self.assertEqual(normalized["number"], number)
+
+    def test_invalid_split_number_does_not_hide_a_valid_legacy_number(self):
+        normalized = normalize_recognized_card_info({
+            "number_local": "No. 0156",
+            "number": "12/100",
+        })
+
+        self.assertEqual(normalized["number_local"], "12")
+        self.assertEqual(normalized["number"], "12/100")
+
 
 @unittest.skipUnless(API_TEST_DEPS_AVAILABLE, "FastAPI/SQLAlchemy are not installed")
 class SearchAndRankCandidatesLocalDbTests(unittest.IsolatedAsyncioTestCase):
@@ -516,6 +544,219 @@ class SearchAndRankCandidatesLocalDbTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0]["id"], "base4-118_en")
         self.assertEqual(candidates[0]["lang"], "en")
+
+    async def test_skips_ai_translation_fallback_when_native_results_are_sufficient(self):
+        self.db.add_all([
+            Card(
+                id=f"jp-{index}_ja",
+                tcg_card_id=f"jp-{index}",
+                name="マグマラシ",
+                number=str(index),
+                lang="ja",
+                is_custom=False,
+            )
+            for index in range(4)
+        ])
+        self.db.add(Card(
+            id="wrong-1_en",
+            tcg_card_id="wrong-1",
+            name="Magmar",
+            number="1",
+            lang="en",
+            is_custom=False,
+        ))
+        self.db.commit()
+
+        with self._mock_tcgdex_client([]) as mock_client:
+            candidates, _ = await _search_and_rank_candidates(
+                self.db,
+                {"name": "マグマラシ", "name_en": "Magmar", "language": "ja"},
+            )
+
+        mock_client.assert_not_called()
+        self.assertEqual(len(candidates), 4)
+        self.assertEqual({card["_lang"] for card in candidates}, {"ja"})
+
+    async def test_uses_ai_translation_fallback_when_native_results_are_thin(self):
+        self.db.add_all([
+            Card(
+                id="jp-1_ja",
+                tcg_card_id="jp-1",
+                name="フシギダネ",
+                number="1",
+                lang="ja",
+                is_custom=False,
+            ),
+            Card(
+                id="base-1_en",
+                tcg_card_id="base-1",
+                name="Bulbasaur",
+                number="1",
+                lang="en",
+                is_custom=False,
+            ),
+        ])
+        self.db.commit()
+
+        with self._mock_tcgdex_client([]) as mock_client:
+            candidates, _ = await _search_and_rank_candidates(
+                self.db,
+                {
+                    "name": "フシギダネ",
+                    "name_en": "Bulbasaur",
+                    "language": "ja",
+                },
+            )
+
+        mock_client.assert_not_called()
+        self.assertEqual({card["_lang"] for card in candidates}, {"ja", "en"})
+
+    async def test_caps_ai_translation_fallback_without_dropping_native_results(self):
+        self.db.add(Card(
+            id="jp-1_ja",
+            tcg_card_id="jp-1",
+            name="フシギダネ",
+            number="1",
+            lang="ja",
+            is_custom=False,
+        ))
+        self.db.add_all([
+            Card(
+                id=f"en-{index}_en",
+                tcg_card_id=f"en-{index}",
+                name="Bulbasaur",
+                number=str(index),
+                lang="en",
+                is_custom=False,
+            )
+            for index in range(10)
+        ])
+        self.db.commit()
+
+        with self._mock_tcgdex_client([]):
+            candidates, _ = await _search_and_rank_candidates(
+                self.db,
+                {
+                    "name": "フシギダネ",
+                    "name_en": "Bulbasaur",
+                    "language": "ja",
+                },
+            )
+
+        self.assertEqual(sum(card["_lang"] == "ja" for card in candidates), 1)
+        self.assertEqual(sum(card["_lang"] == "en" for card in candidates), 5)
+        self.assertEqual(len(candidates), 6)
+
+    async def test_translation_cap_preserves_a_late_exact_number_match(self):
+        self.db.add(Card(
+            id="jp-1_ja",
+            tcg_card_id="jp-1",
+            name="フシギダネ",
+            number="1",
+            lang="ja",
+            is_custom=False,
+        ))
+        self.db.add_all([
+            Card(
+                id=f"en-{index}_en",
+                tcg_card_id=f"en-{index}",
+                name="Bulbasaur",
+                number="999" if index == 9 else str(index),
+                lang="en",
+                is_custom=False,
+            )
+            for index in range(10)
+        ])
+        self.db.commit()
+
+        with self._mock_tcgdex_client([]):
+            candidates, number_match_count = await _search_and_rank_candidates(
+                self.db,
+                {
+                    "name": "フシギダネ",
+                    "name_en": "Bulbasaur",
+                    "number_local": "999",
+                    "language": "ja",
+                },
+            )
+
+        self.assertEqual(len(candidates), 6)
+        self.assertEqual(number_match_count, 1)
+        self.assertEqual(candidates[0]["id"], "en-9_en")
+
+    async def test_english_cards_do_not_search_the_ai_translation_name(self):
+        self.db.add_all([
+            Card(
+                id="bill-1_en",
+                tcg_card_id="bill-1",
+                name="Bill",
+                number="1",
+                lang="en",
+                is_custom=False,
+            ),
+            Card(
+                id="oak-1_en",
+                tcg_card_id="oak-1",
+                name="Professor Oak",
+                number="2",
+                lang="en",
+                is_custom=False,
+            ),
+        ])
+        self.db.commit()
+
+        candidates, _ = await _search_and_rank_candidates(
+            self.db,
+            {"name": "Bill", "name_en": "Professor Oak", "language": "en"},
+        )
+
+        self.assertEqual([card["name"] for card in candidates], ["Bill"])
+
+    async def test_english_fallback_does_not_block_one_exact_native_trainer(self):
+        self.db.add_all([
+            Card(
+                id="pmcg1-074_ja",
+                tcg_card_id="pmcg1-074",
+                name="マサキ",
+                number="074",
+                supertype="Trainer",
+                lang="ja",
+                is_custom=False,
+            ),
+            Card(
+                id="base1-91_en",
+                tcg_card_id="base1-91",
+                name="Bill",
+                number="91",
+                supertype="Trainer",
+                lang="en",
+                is_custom=False,
+            ),
+            Card(
+                id="base4-118_en",
+                tcg_card_id="base4-118",
+                name="Bill",
+                number="118",
+                supertype="Trainer",
+                lang="en",
+                is_custom=False,
+            ),
+        ])
+        self.db.commit()
+
+        recognized = normalize_recognized_card_info({
+            "name": "マサキ",
+            "name_en": "Bill",
+            "card_type": "Trainer",
+            "language": "ja",
+        })
+        candidates, _ = await _search_and_rank_candidates(self.db, recognized)
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertEqual(len(candidates), 3)
+        self.assertEqual(candidates[0]["id"], "pmcg1-074_ja")
+        self.assertTrue(confident)
+        self.assertEqual(decision, "sole_candidate")
 
     async def test_search_is_accent_insensitive_via_shared_text_search_helper(self):
         self.db.add(Card(
@@ -1149,6 +1390,135 @@ class DeterministicMatchingTests(unittest.IsolatedAsyncioTestCase):
             "artist": "Kagemaru Himeno",
             "hp": "60",
         }]
+
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertFalse(confident)
+        self.assertIsNone(decision)
+
+    def test_exact_single_trainer_candidate_can_resolve_without_hp(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Bill",
+            "card_type": "trainer",
+            "language": "en",
+        })
+        candidates = [{
+            "id": "bill",
+            "name": "Bill",
+            "card_type": "Trainer",
+            "_lang": "en",
+        }]
+
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertTrue(confident)
+        self.assertEqual(decision, "sole_candidate")
+
+    def test_exact_single_energy_candidate_can_resolve_without_hp(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Fire Energy",
+            "card_type": "energy",
+            "language": "en",
+        })
+        candidates = [{
+            "id": "fire-energy",
+            "name": "Fire Energy",
+            "card_type": "Energy",
+            "_lang": "en",
+        }]
+
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertTrue(confident)
+        self.assertEqual(decision, "sole_candidate")
+
+    def test_single_pokemon_candidate_keeps_existing_confidence_requirements(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Mew",
+            "card_type": "pokemon",
+            "language": "en",
+        })
+        candidates = [{"id": "mew", "name": "Mew", "_lang": "en"}]
+
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertFalse(confident)
+        self.assertIsNone(decision)
+
+    def test_single_trainer_requires_exact_name_and_matching_language(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Bill",
+            "card_type": "trainer",
+            "language": "en",
+        })
+
+        for candidate in (
+            {
+                "id": "wrong-name",
+                "name": "Bill's Transfer",
+                "card_type": "Trainer",
+                "_lang": "en",
+            },
+            {
+                "id": "wrong-language",
+                "name": "Bill",
+                "card_type": "Trainer",
+                "_lang": "de",
+            },
+            {"id": "unknown-language", "name": "Bill", "card_type": "Trainer"},
+            {
+                "id": "wrong-type",
+                "name": "Bill",
+                "card_type": "Pokemon",
+                "_lang": "en",
+            },
+            {"id": "unknown-type", "name": "Bill", "_lang": "en"},
+        ):
+            with self.subTest(candidate=candidate):
+                confident, decision = _metadata_decision(recognized, [candidate])
+                self.assertFalse(confident)
+                self.assertIsNone(decision)
+
+    def test_single_trainer_contradiction_still_prevents_confidence(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Bill",
+            "card_type": "trainer",
+            "language": "en",
+            "number_local": "118",
+        })
+        candidates = [{
+            "id": "bill",
+            "name": "Bill",
+            "card_type": "Trainer",
+            "number": "119",
+            "_lang": "en",
+        }]
+
+        confident, decision = _metadata_decision(recognized, candidates)
+
+        self.assertFalse(confident)
+        self.assertIsNone(decision)
+
+    def test_multiple_native_trainers_remain_ambiguous(self):
+        recognized = normalize_recognized_card_info({
+            "name": "Bill",
+            "card_type": "trainer",
+            "language": "en",
+        })
+        candidates = [
+            {
+                "id": "bill-1",
+                "name": "Bill",
+                "card_type": "Trainer",
+                "_lang": "en",
+            },
+            {
+                "id": "bill-2",
+                "name": "Bill",
+                "card_type": "Trainer",
+                "_lang": "en",
+            },
+        ]
 
         confident, decision = _metadata_decision(recognized, candidates)
 

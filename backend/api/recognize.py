@@ -171,11 +171,27 @@ def split_recognized_card_number(value) -> tuple[str | None, str | None]:
     return local, total
 
 
+_POKEDEX_NUMBER_TEXT = re.compile(r"\bno\.?\s*\d", re.IGNORECASE)
+
+
+def _drop_pokedex_number(value) -> str | None:
+    """Discard only an explicit ``No. 123``-style Pokedex reference."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return None if _POKEDEX_NUMBER_TEXT.search(text) else text
+
+
 def normalize_recognized_card_info(card_info: dict | None) -> dict:
     """Keep one canonical split identity while preserving the UI's combined number."""
     normalized = dict(card_info or {})
     legacy_local, legacy_total = split_recognized_card_number(normalized.get("number"))
-    local = normalized.get("number_local") or legacy_local
+    local = (
+        _drop_pokedex_number(normalized.get("number_local"))
+        or _drop_pokedex_number(legacy_local)
+    )
     total = normalized.get("number_total") or legacy_total
     normalized["number_local"] = local
     normalized["number_total"] = total
@@ -458,11 +474,18 @@ IMPORTANT ACCURACY RULES:
   details. If any character is unclear, return null instead of guessing.
 - Only return set_code when printed alphanumeric characters are visible near the card
   number. Do not infer a code from the artwork or from recognizing the set.
+- Some cards, especially older ones, print a "No. 0094" or "No.94"-style reference
+  near the artwork or flavor text. That is the species' National Pokedex number, not
+  this card's collector number, and must never be used as number_local. Only use
+  number_local for a small index printed for this specific card, usually alongside
+  a "/" and a set total (like "094/165") or next to a set code. If the only number
+  on the card is a "No." Pokedex reference, or you cannot find a distinct collector
+  number, return null for number_local rather than reusing it.
 
 Extract:
 1. Card name exactly as printed, in the card's language
 2. English card name (same value when already English)
-3. Local collector number, or null
+3. Local collector number (never a "No." Pokedex reference), or null
 4. Printed set total/denominator, or null
 5. Printed set code/abbreviation, or null
 6. Regulation mark, or null
@@ -507,6 +530,11 @@ def _scanner_names_compatible(expected: object, candidate: object) -> bool:
     expected_name = _normalized_scanner_name(expected)
     candidate_name = _normalized_scanner_name(candidate)
     return bool(expected_name and expected_name == candidate_name)
+
+
+def _normalized_card_type(value: object) -> str:
+    normalized = strip_diacritics(str(value or "")).strip()
+    return normalized if normalized in {"pokemon", "trainer", "energy"} else ""
 
 
 def _identity_signal(target, candidate, matcher) -> int:
@@ -583,6 +611,29 @@ def _metadata_decision(card_info: dict, candidates: list[dict]) -> tuple[bool, s
         return True, "number_metadata"
     if not card_info.get("number_local") and {"artist", "hp"}.issubset(signals):
         return True, "artist_hp"
+
+    # Trainer and Energy cards cannot use the Pokemon-only HP corroboration
+    # path above. English translation fallback can add other-language
+    # printings after one exact native result, so uniqueness is measured only
+    # among exact native-language candidates. The model and catalogue must
+    # still agree on the type. Pokemon cards keep their existing safeguards.
+    card_type = _normalized_card_type(card_info.get("card_type"))
+    native_language = normalize_tcgdex_language(card_info.get("language"))
+    native_candidates = [
+        candidate
+        for candidate in ranked
+        if native_language
+        and normalize_tcgdex_language(candidate.get("_lang")) == native_language
+        and _scanner_names_compatible(card_info.get("name"), candidate.get("name"))
+    ]
+    if (
+        len(native_candidates) == 1
+        and native_candidates[0] is top
+        and card_type in {"trainer", "energy"}
+        and _normalized_card_type(top.get("card_type")) == card_type
+        and "language" in signals
+    ):
+        return True, "sole_candidate"
     return False, None
 
 
@@ -851,6 +902,7 @@ async def _api_search_fallback(
                 "id": f"{card.get('id')}_{search_language}",
                 "tcg_card_id": card.get("id"),
                 "name": card.get("name"),
+                "card_type": card.get("category") or card.get("supertype"),
                 "number": card.get("localId"),
                 "image": f"{card.get('image')}/low.webp" if card.get("image") else None,
                 "rarity": card.get("rarity"),
@@ -870,6 +922,10 @@ async def _api_search_fallback(
                 source="api_fallback",
             )
         return []
+
+
+ENGLISH_FALLBACK_MIN_CANDIDATES = 3
+ENGLISH_FALLBACK_TOTAL_CANDIDATE_LIMIT = ENGLISH_FALLBACK_MIN_CANDIDATES * 2
 
 
 async def _search_and_rank_candidates(
@@ -900,10 +956,22 @@ async def _search_and_rank_candidates(
 
     target_number = normalize_scanner_card_number(card_info.get("number_local"))
     candidates = []
+    candidate_keys = set()
+    native_candidate_count = 0
     for search_language, search_name in search_pairs:
         if len(candidates) >= 15:
             break
-        expected_name = card_name_en if search_language == "en" else card_name
+        is_english_fallback = language != "en" and search_language == "en"
+        if is_english_fallback:
+            # name_en is an AI translation rather than text read directly
+            # from the card. Use it only when native-language search is thin,
+            # and cap the total review grid so noisy translated matches cannot
+            # bury the native candidates already found.
+            if native_candidate_count >= ENGLISH_FALLBACK_MIN_CANDIDATES:
+                break
+            if len(candidates) >= ENGLISH_FALLBACK_TOTAL_CANDIDATE_LIMIT:
+                break
+        expected_name = card_name if search_language == language else card_name_en
         try:
             name_filter = accent_insensitive_contains(db, Card.name, search_name)
             if name_filter is None:
@@ -928,6 +996,7 @@ async def _search_and_rank_candidates(
                     Card.id,
                     Card.tcg_card_id,
                     Card.name,
+                    Card.supertype,
                     Card.number,
                     Card.images_small,
                     Card.rarity,
@@ -975,6 +1044,7 @@ async def _search_and_rank_candidates(
                 "id": row.id,
                 "tcg_card_id": row.tcg_card_id,
                 "name": row.name,
+                "card_type": row.supertype,
                 "number": row.number,
                 "image": row.images_small,
                 "rarity": row.rarity,
@@ -1010,14 +1080,33 @@ async def _search_and_rank_candidates(
             card_info.get("number_local"),
             number_field="number",
         )
+        if is_english_fallback:
+            # The fallback has a tighter total cap than native search. Put an
+            # exact collector-number hit first so the cap cannot discard it
+            # behind the baseline name matches selected above.
+            selected_cards, _ = prioritize_cards_by_number(
+                selected_cards,
+                card_info.get("number_local"),
+                number_field="number",
+            )
         for card in selected_cards:
+            if (
+                is_english_fallback
+                and len(candidates) >= ENGLISH_FALLBACK_TOTAL_CANDIDATE_LIMIT
+            ):
+                break
             card_id = card.get("id")
             if not card_id:
                 continue
+            candidate_key = (card_id, search_language)
+            if candidate_key in candidate_keys:
+                continue
+            candidate_keys.add(candidate_key)
             candidates.append({
                 "id": card_id,
                 "tcg_card_id": card.get("tcg_card_id"),
                 "name": card.get("name"),
+                "card_type": card.get("card_type"),
                 "set": None,
                 "number": card.get("number"),
                 "image": card.get("image"),
@@ -1026,6 +1115,8 @@ async def _search_and_rank_candidates(
                 "_lang": search_language,
                 "_number_extra": bool(card.get("_number_extra")),
             })
+            if not is_english_fallback:
+                native_candidate_count += 1
 
     candidate_set_ids = {
         tcg_card_id.rsplit("-", 1)[0]
@@ -1354,7 +1445,9 @@ For each card return the same information as an individual scan:
 - index: the printed corner number
 - name: exact card name in the card's language
 - name_en: English card name
-- number_local: printed local collector number, or null
+- number_local: printed local collector number, or null (never a "No." Pokedex
+  reference near the artwork or flavor text — that is the species' National Pokedex
+  number, not this card's collector number)
 - number_total: printed set total/denominator, or null
 - set_code: printed alphanumeric set code near the number, or null
 - regulation_mark: boxed regulation letter, or null
@@ -1364,7 +1457,8 @@ For each card return the same information as an individual scan:
 - artist: printed illustrator credit, or null
 
 Only report small identity text when every character is visible. Never infer set_code from
-the artwork or from recognizing the set. If a detail is unclear, use null rather than
+the artwork or from recognizing the set. If a detail is unclear, or the only number visible
+is a "No." Pokedex reference rather than a distinct collector number, use null rather than
 guessing. Respond ONLY with a JSON array containing one object per card, without markdown
 or explanation.
 """
