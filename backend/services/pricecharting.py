@@ -49,11 +49,15 @@ def clean_card_number(raw_num: Optional[str]) -> str:
 
 
 def _slugify(text: str) -> str:
-    """Convert text to URL-friendly slug for PriceCharting URLs."""
+    """Convert text to a PriceCharting product-page slug.
+
+    PriceCharting keeps apostrophes (``misty's-vitality-111``) and strips other
+    punctuation such as ``#``.
+    """
     text = text.lower().strip()
-    # Replace non-alphanumeric with hyphens
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[\s_-]+", "-", text)
+    text = re.sub(r"[^\w\s'-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-{2,}", "-", text)
     return text.strip("-")
 
 
@@ -120,11 +124,38 @@ def _cents_to_dollars(val: Any) -> Optional[float]:
         return None
 
 
+# Video-game field names reused for cards. Official mapping:
+# loose=Ungraded, cib=Grade 7, new=Grade 8, graded=Grade 9,
+# box-only=Grade 9.5, manual-only=PSA 10.
+_CARD_GRADE_PRICE_KEYS = (
+    "cib-price",
+    "new-price",
+    "graded-price",
+    "box-only-price",
+    "manual-only-price",
+)
+
+
+def _product_field(product: Dict[str, Any], key: str) -> Any:
+    """Read a PriceCharting key, accepting hyphen or underscore spellings."""
+    if key in product:
+        return product.get(key)
+    return product.get(key.replace("-", "_"))
+
+
+def _has_full_grade_price_row(product: Dict[str, Any]) -> bool:
+    """True when the payload includes the CSV grade columns, even if values are empty."""
+    return all(
+        key in product or key.replace("-", "_") in product
+        for key in _CARD_GRADE_PRICE_KEYS
+    )
+
+
 def _payload_from_pricecharting_product(product: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    ungraded = _cents_to_dollars(product.get("loose-price"))
+    ungraded = _cents_to_dollars(_product_field(product, "loose-price"))
     if not ungraded:
         return None
-    sales_volume = product.get("sales-volume")
+    sales_volume = _product_field(product, "sales-volume")
     try:
         yearly_sales = int(sales_volume) if sales_volume is not None else None
     except (TypeError, ValueError):
@@ -136,11 +167,11 @@ def _payload_from_pricecharting_product(product: Dict[str, Any]) -> Optional[Dic
         "has_live_data": True,
         "is_estimate": False,
         "ungraded": ungraded,
-        "grade_7": _cents_to_dollars(product.get("cib-price")),
-        "grade_8": _cents_to_dollars(product.get("new-price")),
-        "grade_9": _cents_to_dollars(product.get("graded-price")),
-        "grade_9_5": _cents_to_dollars(product.get("box-only-price")),
-        "psa_10": _cents_to_dollars(product.get("manual-only-price")),
+        "grade_7": _cents_to_dollars(_product_field(product, "cib-price")),
+        "grade_8": _cents_to_dollars(_product_field(product, "new-price")),
+        "grade_9": _cents_to_dollars(_product_field(product, "graded-price")),
+        "grade_9_5": _cents_to_dollars(_product_field(product, "box-only-price")),
+        "psa_10": _cents_to_dollars(_product_field(product, "manual-only-price")),
         "sales_volume_year": yearly_sales,
         "product_id": product.get("id"),
         "product_url": _product_page_url(product),
@@ -220,6 +251,25 @@ def resolve_pricecharting_api_token(db: Session, current_user: Optional[User] = 
     return ((any_token.value if any_token else "") or "").strip()
 
 
+def _pricecharting_api_url(path: str, api_token: str, query: str) -> str:
+    return (
+        f"https://www.pricecharting.com{path}"
+        f"?t={urllib.parse.quote(api_token)}&{query}"
+    )
+
+
+def _fetch_pricecharting_json(url: str, timeout: float) -> Dict[str, Any]:
+    raw = _http_get(
+        url,
+        headers={"User-Agent": "Pokecollector/1.0"},
+        timeout=timeout,
+    )
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("PriceCharting response was not an object")
+    return data
+
+
 def fetch_pricecharting_api(
     api_token: str,
     card_name: str,
@@ -231,8 +281,12 @@ def fetch_pricecharting_api(
 ) -> Optional[Dict[str, Any]]:
     """Query PriceCharting API using paid Legendary API token.
 
-    The products list already includes grade prices, so this uses one request
-    per card and stays within the 1 request/second limit.
+    ``/api/products`` is used to pick the right card, but search hits often
+    include only identity fields plus ungraded ``loose-price``. Graded columns
+    live on ``/api/product?id=`` (the CSV-equivalent row). Card detail fetches
+    that second URL when grade keys are missing; ungraded-only sync skips it
+    when ``loose-price`` is already present. Both calls share the 1 req/sec
+    throttle.
     """
     if not api_token:
         return None
@@ -242,22 +296,39 @@ def fetch_pricecharting_api(
     if set_name:
         query_parts.append(set_name)
     query = " ".join(part for part in query_parts if part).strip()
-    search_api_url = (
-        f"https://www.pricecharting.com/api/products"
-        f"?t={urllib.parse.quote(api_token)}&q={urllib.parse.quote_plus(query)}"
+    search_api_url = _pricecharting_api_url(
+        "/api/products",
+        api_token,
+        f"q={urllib.parse.quote_plus(query)}",
     )
 
     try:
-        raw = _http_get(
-            search_api_url,
-            headers={"User-Agent": "Pokecollector/1.0"},
-            timeout=timeout,
-        )
-        data = json.loads(raw)
+        data = _fetch_pricecharting_json(search_api_url, timeout)
         products = data.get("products", [])
+        if not isinstance(products, list):
+            products = []
         product = _pick_pricecharting_product(products, card_name, card_number)
         if not product:
             return None
+
+        product_id = product.get("id")
+        missing_ungraded = _product_field(product, "loose-price") in (None, "", 0)
+        needs_full_row = bool(product_id) and (
+            missing_ungraded or (not ungraded_only and not _has_full_grade_price_row(product))
+        )
+        if needs_full_row:
+            product_api_url = _pricecharting_api_url(
+                "/api/product",
+                api_token,
+                f"id={urllib.parse.quote(str(product_id))}",
+            )
+            try:
+                full = _fetch_pricecharting_json(product_api_url, timeout)
+                if full.get("status") == "success" and full.get("id"):
+                    product = full
+            except Exception as exc:
+                logger.warning("PriceCharting product lookup failed for %s: %s", product_id, exc)
+
         return _payload_from_pricecharting_product(product)
     except Exception as e:
         logger.warning("PriceCharting API call failed: %s", e)

@@ -298,9 +298,9 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
             </p>
           </div>
 
-          {pricechartingForCard?.search_url && (
+          {(pricechartingForCard?.direct_url || pricechartingForCard?.search_url) && (
             <a
-              href={pricechartingForCard.search_url}
+              href={pricechartingForCard.direct_url || pricechartingForCard.search_url}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-ghost inline-flex items-center gap-1.5 text-xs font-bold text-brand-red hover:text-brand-red-light"

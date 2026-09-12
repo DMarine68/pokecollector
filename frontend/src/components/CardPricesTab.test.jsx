@@ -26,6 +26,7 @@ vi.mock('@tanstack/react-query', () => ({
       const liveData = {
         card_id: 'me04-111_en',
         search_url: 'https://www.pricecharting.com/search-products?type=prices&q=Misty%27s+Vitality+111',
+        direct_url: "https://www.pricecharting.com/game/pokemon-pitch-black/misty's-vitality-111",
         has_live_data: true,
         sales_volume_year: 47,
         grades: [
@@ -96,7 +97,7 @@ describe('CardPricesTab', () => {
     expect(markup).toContain('9.98x vs raw')
     expect(markup).toContain('prices.rawBaseline')
     expect(markup).not.toContain('{mult}')
-    expect(markup).toContain('https://www.pricecharting.com/search-products?type=prices&amp;q=Misty%27s+Vitality+111')
+    expect(markup).toContain("https://www.pricecharting.com/game/pokemon-pitch-black/misty&#x27;s-vitality-111")
   })
 
   it('renders collection position metrics when collectionItem is provided', () => {
