@@ -175,7 +175,7 @@ class ProductLedgerApiTests(unittest.TestCase):
         self.db.refresh(product)
         return product
 
-    def add_collection_item(self, quantity=1, user=None, card=None):
+    def add_collection_item(self, quantity=1, user=None, card=None, purchase_price=2):
         card = card or self.card
         item = CollectionItem(
             card_id=card.id,
@@ -184,7 +184,7 @@ class ProductLedgerApiTests(unittest.TestCase):
             condition="NM",
             variant="Normal",
             lang="en",
-            purchase_price=2,
+            purchase_price=purchase_price,
             added_at=datetime.datetime.utcnow(),
         )
         self.db.add(item)
@@ -1079,6 +1079,99 @@ class ProductLedgerApiTests(unittest.TestCase):
         self.assertEqual(product.lifecycle_status, "opened")
         self.assertEqual(collection_item.quantity, 1)
         self.assertIsNone(collection_item.purchase_price)
+
+    def test_product_book_does_not_claim_existing_copies_of_the_same_card(self):
+        existing = self.add_collection_item(quantity=10, purchase_price=None)
+
+        response = create_product_book(
+            ProductBookCreate(
+                product=ProductPurchaseCreate(
+                    product_name="Prismatic ETB",
+                    product_type="Elite Trainer Box",
+                    purchase_price=50,
+                    purchase_date=datetime.date(2026, 5, 30),
+                ),
+                cards=[ProductBookCardCreate(card_id=self.card.id, quantity=1)],
+            ),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        self.db.refresh(existing)
+        lots = self.db.query(CollectionItem).order_by(CollectionItem.id.asc()).all()
+        product_card = self.db.query(ProductCard).one()
+        self.assertEqual(existing.quantity, 10)
+        self.assertEqual(len(lots), 2)
+        self.assertEqual(lots[1].quantity, 1)
+        self.assertEqual(product_card.collection_item_id, lots[1].id)
+        self.assertEqual(product_card.active_quantity, 1)
+        self.assertEqual(response.active_linked_cards_count, 1)
+        self.assertEqual(response.computed_current_value, 10)
+        self.assertEqual(response.pnl, -40)
+
+    def test_book_cards_merge_only_into_the_same_purchase_lot(self):
+        existing = self.add_collection_item(quantity=8, purchase_price=None)
+        product = self.add_product(purchase_price=40)
+        add_product_book_cards(
+            product.id,
+            ProductBookCardsCreate(cards=[ProductBookCardCreate(card_id=self.card.id, quantity=1)]),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        response = add_product_book_cards(
+            product.id,
+            ProductBookCardsCreate(cards=[ProductBookCardCreate(card_id=self.card.id, quantity=2)]),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        self.db.refresh(existing)
+        lots = self.db.query(CollectionItem).order_by(CollectionItem.id.asc()).all()
+        product_card = self.db.query(ProductCard).one()
+        self.assertEqual(existing.quantity, 8)
+        self.assertEqual(len(lots), 2)
+        self.assertEqual(lots[1].quantity, 3)
+        self.assertEqual(product_card.active_quantity, 3)
+        self.assertEqual(response.computed_current_value, 30)
+        self.assertEqual(response.pnl, -10)
+
+    def test_two_purchases_keep_independent_lots_of_the_same_card(self):
+        self.add_collection_item(quantity=5, purchase_price=None)
+        first = create_product_book(
+            ProductBookCreate(
+                product=ProductPurchaseCreate(
+                    product_name="Box A",
+                    product_type="Booster Box",
+                    purchase_price=100,
+                    purchase_date=datetime.date(2026, 5, 30),
+                ),
+                cards=[ProductBookCardCreate(card_id=self.card.id, quantity=1)],
+            ),
+            current_user=self.user,
+            db=self.db,
+        )
+        second = create_product_book(
+            ProductBookCreate(
+                product=ProductPurchaseCreate(
+                    product_name="Box B",
+                    product_type="Booster Box",
+                    purchase_price=80,
+                    purchase_date=datetime.date(2026, 6, 1),
+                ),
+                cards=[ProductBookCardCreate(card_id=self.card.id, quantity=1)],
+            ),
+            current_user=self.user,
+            db=self.db,
+        )
+
+        lots = self.db.query(CollectionItem).order_by(CollectionItem.id.asc()).all()
+        self.assertEqual([item.quantity for item in lots], [5, 1, 1])
+        self.assertEqual(first.active_linked_cards_count, 1)
+        self.assertEqual(second.active_linked_cards_count, 1)
+        self.assertEqual(first.pnl, -90)
+        self.assertEqual(second.pnl, -70)
+        self.assertNotEqual(first.product_cards[0].collection_item_id, second.product_cards[0].collection_item_id)
 
 
 if __name__ == "__main__":

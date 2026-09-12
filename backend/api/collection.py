@@ -260,11 +260,55 @@ def ensure_card_exists(
     return card
 
 
+def _find_mergeable_collection_item(
+    db: Session,
+    current_user: User,
+    *,
+    card_id: str,
+    variant: str,
+    lang: str,
+    condition: str,
+    purchase_price,
+    merge_item_ids: set[int] | None = None,
+) -> CollectionItem | None:
+    """Return an existing pile that new copies may join.
+
+    Product-linked lots stay exclusive so finishing one purchase cannot absorb
+    copies that already belong to another product or to standalone inventory.
+    Callers that already own a lot (the same product's book) pass those ids via
+    `merge_item_ids`.
+    """
+    query = db.query(CollectionItem).filter(
+        CollectionItem.card_id == card_id,
+        CollectionItem.variant == variant,
+        CollectionItem.lang == lang,
+        CollectionItem.condition == condition,
+        CollectionItem.purchase_price == purchase_price,
+        CollectionItem.user_id == current_user.id,
+    )
+    if merge_item_ids is not None:
+        if not merge_item_ids:
+            return None
+        query = query.filter(CollectionItem.id.in_(merge_item_ids))
+    else:
+        linked_rows = db.query(ProductCard.collection_item_id).filter(
+            ProductCard.user_id == current_user.id,
+            ProductCard.collection_item_id.isnot(None),
+            ProductCard.active_quantity > 0,
+        ).all()
+        linked_item_ids = {item_id for (item_id,) in linked_rows if item_id is not None}
+        if linked_item_ids:
+            query = query.filter(~CollectionItem.id.in_(linked_item_ids))
+    return query.order_by(CollectionItem.id.asc()).first()
+
+
 def _add_collection_item(
     db: Session,
     current_user: User,
     item: CollectionItemCreate,
     commit: bool = True,
+    *,
+    merge_item_ids: set[int] | None = None,
 ) -> tuple[str, CollectionItem]:
     """Add one item and return ("added"|"updated", collection_item)."""
     item_lang = _collection_item_language(item.card_id, item.lang)
@@ -284,14 +328,16 @@ def _add_collection_item(
         effective_card_id = f"{tcg_card_id}_{item_lang}"
         ensure_card_exists(db, effective_card_id, lang=item_lang)
 
-    existing = db.query(CollectionItem).filter(
-        CollectionItem.card_id == effective_card_id,
-        CollectionItem.variant == item_variant,
-        CollectionItem.lang == item_lang,
-        CollectionItem.condition == item.condition,
-        CollectionItem.purchase_price == item.purchase_price,
-        CollectionItem.user_id == current_user.id,
-    ).first()
+    existing = _find_mergeable_collection_item(
+        db,
+        current_user,
+        card_id=effective_card_id,
+        variant=item_variant,
+        lang=item_lang,
+        condition=item.condition,
+        purchase_price=item.purchase_price,
+        merge_item_ids=merge_item_ids,
+    )
 
     if existing:
         existing.quantity += item.quantity or 1
@@ -535,56 +581,8 @@ def add_to_collection(
     db: Session = Depends(get_db),
 ):
     """Add a card to the collection. Cards with identical card_id+variant+lang+condition+purchase_price are grouped."""
-    item_lang = _collection_item_language(item.card_id, item.lang)
-    item_variant = _normalize_collection_variant(item.variant)
-
-    # Resolve the correct language-variant card_id
-    if item.card_id.startswith("custom-"):
-        # Custom cards keep their original ID (no language suffix)
-        effective_card_id = item.card_id
-        # Always derive lang from the custom card record itself
-        custom_card = db.query(Card).filter(Card.id == item.card_id).first()
-        if not custom_card or custom_card.custom_owner_id != current_user.id:
-            if custom_card and custom_card.is_shared_template:
-                raise HTTPException(status_code=409, detail="Copy this shared template before adding it.")
-            raise HTTPException(status_code=404, detail="Custom card not found")
-        if custom_card and custom_card.lang:
-            item_lang = custom_card.lang
-    else:
-        tcg_card_id, _ = pokemon_api.strip_lang_suffix(item.card_id)
-        effective_card_id = f"{tcg_card_id}_{item_lang}"
-        ensure_card_exists(db, effective_card_id, lang=item_lang)
-
-    # Find existing entry for same card + variant + lang + condition + purchase_price combination
-    existing = db.query(CollectionItem).filter(
-        CollectionItem.card_id == effective_card_id,
-        CollectionItem.variant == item_variant,
-        CollectionItem.lang == item_lang,
-        CollectionItem.condition == item.condition,
-        CollectionItem.purchase_price == item.purchase_price,
-        CollectionItem.user_id == current_user.id,
-    ).first()
-
-    if existing:
-        existing.quantity += item.quantity or 1
-        db.commit()
-        db.refresh(existing)
-        return _annotate_collection_item(db, current_user, existing)
-    else:
-        db_item = CollectionItem(
-            card_id=effective_card_id,
-            quantity=item.quantity,
-            condition=item.condition,
-            variant=item_variant,
-            purchase_price=item.purchase_price,
-            lang=item_lang,
-            user_id=current_user.id,
-            added_at=datetime.datetime.utcnow(),
-        )
-        db.add(db_item)
-        db.commit()
-        db.refresh(db_item)
-        return _annotate_collection_item(db, current_user, db_item)
+    _status, db_item = _add_collection_item(db, current_user, item)
+    return _annotate_collection_item(db, current_user, db_item)
 
 
 @router.post("/bulk-add", response_model=BulkCollectionAddResponse)
@@ -596,9 +594,9 @@ def bulk_add_to_collection(
     """Add multiple cards to the collection in a single request.
 
     Each item is committed independently so one invalid card does not roll back
-    the whole batch. Existing rows are matched by card, normalized variant,
-    language, condition, purchase price, and current user, then quantity is
-    incremented.
+    the whole batch. Existing unlinked rows are matched by card, normalized
+    variant, language, condition, purchase price, and current user, then
+    quantity is incremented. Product-linked lots are left exclusive.
     """
     added = 0
     updated = 0
@@ -607,48 +605,10 @@ def bulk_add_to_collection(
 
     for item in request.items:
         try:
-            item_lang = _collection_item_language(item.card_id, item.lang)
-            item_variant = _normalize_collection_variant(item.variant)
-
-            if item.card_id.startswith("custom-"):
-                effective_card_id = item.card_id
-                custom_card = db.query(Card).filter(Card.id == item.card_id).first()
-                if not custom_card or custom_card.custom_owner_id != current_user.id:
-                    if custom_card and custom_card.is_shared_template:
-                        raise HTTPException(status_code=409, detail="Copy this shared template before adding it.")
-                    raise HTTPException(status_code=404, detail="Custom card not found")
-                if custom_card and custom_card.lang:
-                    item_lang = custom_card.lang
-            else:
-                tcg_card_id, _ = pokemon_api.strip_lang_suffix(item.card_id)
-                effective_card_id = f"{tcg_card_id}_{item_lang}"
-                ensure_card_exists(db, effective_card_id, lang=item_lang)
-
-            existing = db.query(CollectionItem).filter(
-                CollectionItem.card_id == effective_card_id,
-                CollectionItem.variant == item_variant,
-                CollectionItem.lang == item_lang,
-                CollectionItem.condition == item.condition,
-                CollectionItem.purchase_price == item.purchase_price,
-                CollectionItem.user_id == current_user.id,
-            ).first()
-
-            if existing:
-                existing.quantity += item.quantity or 1
-                db.commit()
+            status, _collection_item = _add_collection_item(db, current_user, item, commit=True)
+            if status == "updated":
                 updated += 1
             else:
-                db.add(CollectionItem(
-                    card_id=effective_card_id,
-                    quantity=item.quantity,
-                    condition=item.condition,
-                    variant=item_variant,
-                    purchase_price=item.purchase_price,
-                    lang=item_lang,
-                    user_id=current_user.id,
-                    added_at=datetime.datetime.utcnow(),
-                ))
-                db.commit()
                 added += 1
         except HTTPException as exc:
             db.rollback()

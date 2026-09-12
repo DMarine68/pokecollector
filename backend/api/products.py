@@ -443,17 +443,36 @@ def _ensure_book_cards_exist(db: Session, current_user: User, cards: list[Produc
         ensure_card_exists(db, f"{tcg_card_id}_{item_lang}", lang=item_lang)
 
 
+def _product_linked_collection_item_ids(
+    db: Session,
+    current_user: User,
+    product: ProductPurchase,
+) -> set[int]:
+    """Collection lots already on this purchase; other piles stay independent."""
+    rows = db.query(ProductCard.collection_item_id).filter(
+        ProductCard.product_id == product.id,
+        ProductCard.user_id == current_user.id,
+        ProductCard.collection_item_id.isnot(None),
+    ).all()
+    return {item_id for (item_id,) in rows if item_id is not None}
+
+
 def _add_and_link_book_cards(
     db: Session,
     current_user: User,
     product: ProductPurchase,
     cards: list[ProductBookCardCreate],
 ) -> None:
-    """Add catalogue cards to collection with no per-card cost, then link them."""
+    """Add catalogue cards as this purchase's lots, then link only those quantities.
+
+    Existing standalone copies of the same card are left alone. A card type can
+    appear on many purchases; each purchase keeps its own linked quantity.
+    """
     if len(cards) > PRODUCT_BOOK_MAX_CARDS:
         raise HTTPException(status_code=422, detail=f"cards cannot exceed {PRODUCT_BOOK_MAX_CARDS} lines")
 
     merged = _merge_book_cards(cards)
+    linked_item_ids = _product_linked_collection_item_ids(db, current_user, product)
     links_by_item_id: dict[int, int] = {}
     for card in merged:
         _status, collection_item = _add_collection_item(
@@ -468,7 +487,9 @@ def _add_and_link_book_cards(
                 lang=card.lang,
             ),
             commit=False,
+            merge_item_ids=linked_item_ids,
         )
+        linked_item_ids.add(collection_item.id)
         links_by_item_id[collection_item.id] = links_by_item_id.get(collection_item.id, 0) + card.quantity
 
     _link_collection_items(

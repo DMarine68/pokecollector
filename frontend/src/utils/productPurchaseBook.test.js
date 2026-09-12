@@ -3,6 +3,7 @@ import {
   PRODUCT_BOOK_SELECTION_LIMIT,
   bookLineKey,
   productBookPreview,
+  productBookCounts,
   removeProductBookLine,
   toProductBookCards,
   updateProductBookLineQuantity,
@@ -61,6 +62,13 @@ describe('productPurchaseBook', () => {
       line({ quantity: 2 }),
       line({ card_id: 'sv1-2_en', quantity: 1, card: { price_trend: 5 } }),
     ], 12)
-    expect(preview).toEqual({ market: 25, cost: 12, pnl: 13, count: 3 })
+    expect(preview).toEqual({ market: 25, cost: 12, pnl: 13, count: 3, rows: 2 })
+  })
+
+  it('counts distinct book lines separately from total copies', () => {
+    expect(productBookCounts([
+      line({ quantity: 2 }),
+      line({ card_id: 'sv1-2_en', quantity: 3 }),
+    ])).toEqual({ rows: 2, cards: 5 })
   })
 })

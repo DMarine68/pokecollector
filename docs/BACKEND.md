@@ -169,7 +169,8 @@ Custom cards belong to exactly one user. Owners may publish a card as a shared t
 - Active fields: `card_id`, `user_id`, `quantity`, `condition`, `variant`, `purchase_price`, `lang`
 - Variant values are now the physical print variants only: `Normal`, `Holo`, `Reverse Holo`, `First Edition`
 - The old grading UI is gone; the database migration history still contains a legacy `grade` column, but it is not part of the current ORM model or API schema
-- Existing rows are grouped by user, card, variant, language, condition, and purchase price when cards are added through the API
+- Existing unlinked rows are grouped by user, card, variant, language, condition, and purchase price when cards are added through the API
+- Product-book finalize creates a dedicated collection lot per purchase so existing copies of the same card are not absorbed into that product's P&L. The same catalogue card can appear on many purchases via `product_cards`
 
 ### `User`
 
