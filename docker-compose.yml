@@ -48,6 +48,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
       GEMINI_ALLOWED_MODELS: ${GEMINI_ALLOWED_MODELS:-}
+      PRICECHARTING_API_TOKEN: ${PRICECHARTING_API_TOKEN:-}
       OPENAI_SCANNER_ENABLED: ${OPENAI_SCANNER_ENABLED:-false}
       OPENAI_PROVIDER_LABEL: ${OPENAI_PROVIDER_LABEL:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
@@ -60,6 +61,7 @@ services:
       PRE_UPGRADE_BACKUP_REQUIRED: ${PRE_UPGRADE_BACKUP_REQUIRED:-true}
       PRE_UPGRADE_BACKUP_KEEP: ${PRE_UPGRADE_BACKUP_KEEP:-10}
       POKEDEX_IMAGE_CACHE_DIR: /app/data/pokedex-images
+      CARD_IMAGE_CACHE_DIR: /app/data/card-images
       SCAN_UPLOAD_DIR: /app/data/scan-uploads
       SCAN_TRACE_DIR: ${SCAN_TRACE_DIR:-}
       SCAN_TRACE_STORAGE_DIR: /app/data/scan-traces
@@ -74,6 +76,7 @@ services:
       - ./backups:/app/backups
       - ./data/auth:/app/data/auth
       - ./data/pokedex-images:/app/data/pokedex-images
+      - ./data/card-images:/app/data/card-images
       - ./data/scan-uploads:/app/data/scan-uploads
       - ./data/scan-traces:/app/data/scan-traces
     ports:

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Card, ImageCache, ProductPurchase, Set, Setting
+from services import image_disk_cache
 from services.card_visibility import get_configured_sync_languages, get_pinned_set_language_pairs
 from services.image_url_security import validate_public_https_image_url
 from services.product_images import (
@@ -31,6 +32,11 @@ _ALLOWED_CUSTOM_IMAGE_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
+}
+_PUBLIC_IMAGE_HEADERS = {"Cache-Control": "public, max-age=86400"}
+_PRODUCT_IMAGE_HEADERS = {
+    "Cache-Control": "private, no-cache",
+    "X-Content-Type-Options": "nosniff",
 }
 
 
@@ -84,10 +90,69 @@ def _is_globally_visible_set_image(db: Session, card_set: Set) -> bool:
     return (tcg_set_id, set_lang) in get_pinned_set_language_pairs(db)
 
 
-def _get_or_fetch(db: Session, key: str, url: str) -> tuple[bytes, str]:
+def _store_cached_image(db: Session, key: str, data: bytes, content_type: str) -> tuple[bytes, str]:
+    image_disk_cache.write(key, data, content_type)
+    db.add(ImageCache(image_key=key, data=data, content_type=content_type))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        cached = db.query(ImageCache).filter(ImageCache.image_key == key).first()
+        if cached:
+            image_disk_cache.write(key, cached.data, cached.content_type)
+            return cached.data, cached.content_type
+        raise
+    return data, content_type
+
+
+def _read_cached_image(db: Session, key: str) -> tuple[bytes, str] | None:
+    found = image_disk_cache.lookup(key)
+    if found:
+        return found[0].read_bytes(), found[1]
     cached = db.query(ImageCache).filter(ImageCache.image_key == key).first()
+    if not cached:
+        return None
+    image_disk_cache.write(key, cached.data, cached.content_type)
+    return cached.data, cached.content_type
+
+
+def _image_response(key: str, data: bytes, content_type: str, headers: dict) -> Response:
+    found = image_disk_cache.lookup(key)
+    if found:
+        return FileResponse(found[0], media_type=found[1], headers=headers)
+    return Response(content=data, media_type=content_type, headers=headers)
+
+
+def _cached_image_response(
+    db: Session,
+    key: str,
+    url: str,
+    headers: dict,
+    *,
+    custom: bool = False,
+    before_cache: Callable[[], bool] | None = None,
+    allowed_content_types: set[str] | None = None,
+) -> Response:
+    found = image_disk_cache.lookup(key)
+    if found:
+        return FileResponse(found[0], media_type=found[1], headers=headers)
+    if custom:
+        data, content_type = _get_or_fetch_custom_image(
+            db,
+            key,
+            url,
+            before_cache=before_cache,
+            allowed_content_types=allowed_content_types,
+        )
+    else:
+        data, content_type = _get_or_fetch(db, key, url)
+    return _image_response(key, data, content_type, headers)
+
+
+def _get_or_fetch(db: Session, key: str, url: str) -> tuple[bytes, str]:
+    cached = _read_cached_image(db, key)
     if cached:
-        return cached.data, cached.content_type
+        return cached
 
     try:
         resp = _client.get(url)
@@ -96,18 +161,7 @@ def _get_or_fetch(db: Session, key: str, url: str) -> tuple[bytes, str]:
         raise HTTPException(status_code=502, detail="Failed to fetch image from upstream") from exc
 
     content_type = resp.headers.get("content-type", "image/webp")
-    entry = ImageCache(image_key=key, data=resp.content, content_type=content_type)
-    db.add(entry)
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        cached = db.query(ImageCache).filter(ImageCache.image_key == key).first()
-        if cached:
-            return cached.data, cached.content_type
-        raise
-
-    return resp.content, content_type
+    return _store_cached_image(db, key, resp.content, content_type)
 
 
 def _get_or_fetch_custom_image(
@@ -117,9 +171,9 @@ def _get_or_fetch_custom_image(
     before_cache: Callable[[], bool] | None = None,
     allowed_content_types: set[str] | None = None,
 ) -> tuple[bytes, str]:
-    cached = db.query(ImageCache).filter(ImageCache.image_key == key).first()
+    cached = _read_cached_image(db, key)
     if cached:
-        return cached.data, cached.content_type
+        return cached
 
     current_url = validate_public_https_image_url(url)
     for _ in range(_MAX_CUSTOM_IMAGE_REDIRECTS + 1):
@@ -160,17 +214,7 @@ def _get_or_fetch_custom_image(
         data = b"".join(chunks)
         if before_cache is not None and not before_cache():
             return data, content_type
-        entry = ImageCache(image_key=key, data=data, content_type=content_type)
-        db.add(entry)
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            cached = db.query(ImageCache).filter(ImageCache.image_key == key).first()
-            if cached:
-                return cached.data, cached.content_type
-            raise
-        return data, content_type
+        return _store_cached_image(db, key, data, content_type)
 
     raise HTTPException(status_code=502, detail="Custom image redirected too many times")
 
@@ -201,24 +245,31 @@ def get_card_image(
     try:
         if card.is_custom:
             url_hash = hashlib.sha1(url.encode("utf-8")).hexdigest()
-            data, content_type = _get_or_fetch_custom_image(
+            return _cached_image_response(
                 db,
                 f"card:{card_id}:{size}:manual:{url_hash}",
                 url,
+                _PUBLIC_IMAGE_HEADERS,
+                custom=True,
                 allowed_content_types=_ALLOWED_CUSTOM_IMAGE_TYPES,
             )
-        elif card.custom_image_url and url == card.custom_image_url:
-            data, content_type = _get_or_fetch_custom_image(db, f"card:{card_id}:{size}:custom", url)
-        else:
-            url_hash = hashlib.sha1(url.encode("utf-8")).hexdigest()
-            data, content_type = _get_or_fetch(db, f"card:{card_id}:{size}:{url_hash}", url)
+        if card.custom_image_url and url == card.custom_image_url:
+            return _cached_image_response(
+                db,
+                f"card:{card_id}:{size}:custom",
+                url,
+                _PUBLIC_IMAGE_HEADERS,
+                custom=True,
+            )
+        url_hash = hashlib.sha1(url.encode("utf-8")).hexdigest()
+        return _cached_image_response(
+            db,
+            f"card:{card_id}:{size}:{url_hash}",
+            url,
+            _PUBLIC_IMAGE_HEADERS,
+        )
     except (HTTPException, ValueError):
         return _card_back_response()
-    return Response(
-        content=data,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
 
 
 @router.get("/set/{set_id}/{image_type}")
@@ -251,16 +302,11 @@ def get_set_image(set_id: str, image_type: str, db: Session = Depends(get_db)):
         return _set_fallback_response()
 
     try:
-        data, content_type = _get_or_fetch(db, cache_key, url)
+        return _cached_image_response(db, cache_key, url, _PUBLIC_IMAGE_HEADERS)
     except HTTPException as exc:
         if exc.status_code == 502:
             return _set_fallback_response()
         raise
-    return Response(
-        content=data,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
 
 
 @router.get("/product/{product_id}")
@@ -279,20 +325,14 @@ def get_product_image(
         return _card_back_response()
 
     try:
-        data, content_type = _get_or_fetch_custom_image(
+        return _cached_image_response(
             db,
             product_image_cache_key(product.image_url),
             product.image_url,
+            _PRODUCT_IMAGE_HEADERS,
+            custom=True,
             before_cache=lambda: prepare_product_image_cache(db, product.image_url),
             allowed_content_types=_ALLOWED_CUSTOM_IMAGE_TYPES,
         )
     except (HTTPException, ValueError):
         return _card_back_response()
-    return Response(
-        content=data,
-        media_type=content_type,
-        headers={
-            "Cache-Control": "private, no-cache",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )

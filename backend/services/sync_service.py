@@ -20,6 +20,8 @@ from services.digital_sets import digital_sets_enabled, refresh_digital_catalogu
 from services.card_values import effective_market_price, normalize_price_field
 from services.portfolio_valuation import calculate_portfolio_valuation, portfolio_snapshot_fields
 from services.price_utils import PRICE_FIELDS, has_valid_price
+from services.pricecharting import sync_pricecharting_ungraded_for_price_sync
+from services.search_price_source import get_search_price_source
 from services.tcgdex_languages import with_lang_suffix
 
 logger = logging.getLogger(__name__)
@@ -603,7 +605,8 @@ def check_wishlist_alerts(db: Session, updated_card_ids: list):
     for item in wishlist_items:
         card = item.card
         price_field = _user_price_field(db, item.user_id)
-        current_price = effective_market_price(card, price_field=price_field)
+        price_source = get_search_price_source(db, item.user_id)
+        current_price = effective_market_price(card, price_field=price_field, price_source=price_source)
         if not card or current_price is None:
             continue
 
@@ -642,7 +645,8 @@ def take_portfolio_snapshot(db: Session, user_id: int | None = None):
 
     for scoped_user_id in user_ids:
         price_field = _user_price_field(db, scoped_user_id)
-        valuation = calculate_portfolio_valuation(db, scoped_user_id, price_field)
+        price_source = get_search_price_source(db, scoped_user_id)
+        valuation = calculate_portfolio_valuation(db, scoped_user_id, price_field, price_source=price_source)
 
         snapshot = PortfolioSnapshot(
             date=now,
@@ -1141,6 +1145,10 @@ def perform_price_sync(db: Session, *, force: bool = False) -> dict:
 
         record_price_history_batch(db, price_history_cards)
         db.commit()
+
+        pc_updated = sync_pricecharting_ungraded_for_price_sync(db, selected_ids)
+        if pc_updated:
+            logger.info("Price sync also updated %s PriceCharting ungraded prices", pc_updated)
 
         # Check wishlist alerts
         check_wishlist_alerts(db, updated_card_ids)

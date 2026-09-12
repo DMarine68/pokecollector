@@ -624,7 +624,13 @@ const id = {
     currency: 'Mata Uang',
     currencyDesc: 'Tampilan harga',
     priceType: 'Tipe Harga',
-    priceTypeDesc: 'Harga Cardmarket mana yang ditampilkan',
+    priceTypeDesc: 'Metrik Cardmarket mana yang dipakai saat sumber harga adalah Cardmarket',
+    priceSource: 'Sumber harga',
+    priceSourceDesc: 'Pasar mana yang dipakai untuk pencarian, koleksi, dan portofolio',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (ungraded)',
+    priceSourcePricechartingDesc: 'Harga PriceCharting ungraded. Koleksi dan portofolio mengonversinya ke mata uang tampilan. Token API di Sinkronisasi Data diperlukan untuk memuat harga yang belum tersimpan.',
     tcgdexSyncLanguages: 'Bahasa Sinkronisasi TCGdex',
     tcgdexSyncLanguagesDesc: 'Pilih bahasa yang harus diambil oleh sinkronisasi lengkap set/kartu TCGdex. Bahasa tambahan meningkatkan waktu sinkronisasi, panggilan API, dan ukuran database. Sinkronisasi harga tidak terpengaruh.',
     tcgdexSyncLanguagesSelected: 'dipilih',
@@ -807,6 +813,8 @@ const id = {
     priceInterval: 'Interval Sinkronisasi Kecil Otomatis',
     syncPricesOnlyDesc: 'Segarkan harga untuk semua kartu koleksi, wishlist, dan binder yang dilacak tanpa batas atau cooldown sinkronisasi kecil.',
     autoSmallSyncDesc: 'Sinkronisasi latar belakang otomatis menjalankan sinkronisasi harga kecil.',
+    pricechartingToken: 'Token API PriceCharting',
+    pricechartingTokenDesc: 'Token Legendary dari PriceCharting.com. Anda juga bisa set PRICECHARTING_API_TOKEN di .env. Maksimal 1 permintaan per detik. Jika sumber harga PriceCharting dan mata uang USD, sinkronisasi harga berikutnya memperbarui harga ungraded di latar belakang.',
     // Sync interval options (days)
     day1: '1 hari',
     days2: '2 hari',
@@ -849,6 +857,8 @@ const id = {
     history: 'Riwayat Harga',
     sinceTracking: 'sejak dilacak',
     cardmarketTitle: 'Harga Cardmarket',
+    pricechartingLoading: 'Memuat PriceCharting…',
+    salesVolumeYear: '{count} terjual dalam setahun terakhir',
   },
 
   // Set Detail

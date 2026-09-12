@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import en from '../i18n/en'
-import { priceFieldFromPrimary } from '../utils/prices'
+import { priceFieldFromPrimary, normalizeSearchPriceSource } from '../utils/prices'
 import { normalizeTcgdexLanguageCsv } from '../utils/tcgdexLanguages'
 import { useAuth } from './AuthContext'
 
@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   language: 'en',
   price_display: '["trend", "avg", "avg1", "avg7", "avg30", "low"]',
   price_primary: 'trend',
+  search_price_source: 'cardmarket',
   portfolio_display_mode: 'portfolio_value',
   tcgdex_sync_languages: 'en,de',
   tcgdex_digital_sets_enabled: 'true',
@@ -163,9 +164,13 @@ export function SettingsProvider({ children }) {
       setExchangeRateReady(false)
       setExchangeRateCurrency(null)
       setExchangeRate(1.1)
-      fetchExchangeRate('EUR', 'USD', 1.1).then(rate => {
+      Promise.all([
+        fetchExchangeRate('EUR', 'USD', 1.1),
+        fetchExchangeRate('USD', 'EUR', 0.91),
+      ]).then(([eurToUsd, usdToEur]) => {
         if (!cancelled) {
-          setExchangeRate(rate)
+          setExchangeRate(eurToUsd)
+          setUsdToEurRate(usdToEur)
           setExchangeRateCurrency('USD')
           setExchangeRateReady(true)
         }
@@ -260,6 +265,11 @@ export function SettingsProvider({ children }) {
   const moneyExchangeRateReady = currency !== 'USD' || (exchangeRateReady && exchangeRateCurrency === 'USD')
   const pricePrimary = getPricePrimary()
   const pricePrimaryField = priceFieldFromPrimary(pricePrimary)
+  const searchPriceSource = normalizeSearchPriceSource(settings.search_price_source)
+  const valuationParams = useMemo(() => ({
+    price_field: pricePrimaryField,
+    price_source: searchPriceSource,
+  }), [pricePrimaryField, searchPriceSource])
 
   const formatPrice = useCallback((eurAmount) => {
     if (eurAmount == null || isNaN(Number(eurAmount))) return '-'
@@ -282,6 +292,9 @@ export function SettingsProvider({ children }) {
       priceDisplay: getPriceDisplay(),
       pricePrimary,
       pricePrimaryField,
+      searchPriceSource,
+      valuationParams,
+      usdToEurRate,
       loaded,
       currency,
       currencySymbol,

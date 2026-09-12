@@ -67,10 +67,10 @@ function WishlistItemEditor({ item, onDone }) {
 }
 
 function WishlistCardModal({ item, onClose, onAddToCollection, onRemove }) {
-  const { t, formatPrice, pricePrimaryField } = useSettings()
+  const { t, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate } = useSettings()
   const [activeTab, setActiveTab] = useState('wishlist')
   const card = item.card
-  const price = getEffectiveCardPrice(card, null, pricePrimaryField)
+  const price = getEffectiveCardPrice(card, null, pricePrimaryField, searchPriceSource, usdToEurRate)
 
   return (
     <CardDialog
@@ -102,7 +102,7 @@ function WishlistCardModal({ item, onClose, onAddToCollection, onRemove }) {
         </div>
       )}
       {activeTab === 'prices' && (
-        <CardPricesTab card={card} variant="Normal" />
+        <CardPricesTab key={card?.id} card={card} variant="Normal" />
       )}
       {activeTab === 'wishlist' && (
         <div className="space-y-4">
@@ -124,7 +124,7 @@ function WishlistCardModal({ item, onClose, onAddToCollection, onRemove }) {
 }
 
 export default function Wishlist() {
-  const { t, formatPrice, pricePrimaryField } = useSettings()
+  const { t, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate } = useSettings()
   const confirmDialog = useConfirmDialog()
   const [editingId, setEditingId] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
@@ -199,7 +199,7 @@ export default function Wishlist() {
 
   const filtered = useMemo(() => {
     let result = items.filter(item => {
-      const price = getEffectiveCardPrice(item.card, null, pricePrimaryField)
+      const price = getEffectiveCardPrice(item.card, null, pricePrimaryField, searchPriceSource, usdToEurRate)
       if (filterSet && item.card?.set_ref?.id !== filterSet) return false
       if (filterRarity && item.card?.rarity !== filterRarity) return false
       if (filterMinPrice && (price == null || price < parseFloat(filterMinPrice))) return false
@@ -211,7 +211,7 @@ export default function Wishlist() {
     result = [...result].sort((a, b) => {
       let valA, valB
       switch (sortBy) {
-        case 'price': valA = getEffectiveCardPrice(a.card, null, pricePrimaryField) || -1; valB = getEffectiveCardPrice(b.card, null, pricePrimaryField) || -1; break
+        case 'price': valA = getEffectiveCardPrice(a.card, null, pricePrimaryField, searchPriceSource, usdToEurRate) || -1; valB = getEffectiveCardPrice(b.card, null, pricePrimaryField, searchPriceSource, usdToEurRate) || -1; break
         case 'name': valA = (a.card?.name || '').toLowerCase(); valB = (b.card?.name || '').toLowerCase(); break
         case 'created_at': valA = a.created_at || ''; valB = b.created_at || ''; break
         default: return 0
@@ -222,7 +222,7 @@ export default function Wishlist() {
     })
 
     return result
-  }, [items, filterSet, filterRarity, filterMinPrice, filterMaxPrice, filterHasAlert, sortBy, sortOrder, pricePrimaryField])
+  }, [items, filterSet, filterRarity, filterMinPrice, filterMaxPrice, filterHasAlert, sortBy, sortOrder, pricePrimaryField, searchPriceSource, usdToEurRate])
 
   const resetFilters = () => {
     setFilterSet(''); setFilterRarity(''); setFilterMinPrice(''); setFilterMaxPrice(''); setFilterHasAlert(false)
@@ -343,7 +343,7 @@ export default function Wishlist() {
                   <tbody>
                     {filtered.map((item) => {
                       const card = item.card
-                      const price = getEffectiveCardPrice(card, null, pricePrimaryField)
+                      const price = getEffectiveCardPrice(card, null, pricePrimaryField, searchPriceSource, usdToEurRate)
                       const alertAbove = price && item.price_alert_above && price >= item.price_alert_above
                       const alertBelow = price && item.price_alert_below && price <= item.price_alert_below
 
@@ -438,7 +438,7 @@ export default function Wishlist() {
               <div className="md:hidden space-y-2 p-2">
                 {filtered.map((item) => {
                   const card = item.card
-                  const price = getEffectiveCardPrice(card, null, pricePrimaryField)
+                  const price = getEffectiveCardPrice(card, null, pricePrimaryField, searchPriceSource, usdToEurRate)
                   const alertAbove = price && item.price_alert_above && price >= item.price_alert_above
                   const alertBelow = price && item.price_alert_below && price <= item.price_alert_below
 

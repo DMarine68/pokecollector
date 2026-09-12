@@ -624,7 +624,13 @@ const it = {
     currency: 'Valuta',
     currencyDesc: 'Visualizzazione prezzo',
     priceType: 'Tipo prezzo',
-    priceTypeDesc: 'Quale prezzo Cardmarket viene visualizzato',
+    priceTypeDesc: 'Quale metrica Cardmarket è usata quando la fonte prezzo è Cardmarket',
+    priceSource: 'Fonte prezzo',
+    priceSourceDesc: 'Quale mercato è usato per ricerca, collezione e portafoglio',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (non gradato)',
+    priceSourcePricechartingDesc: 'Prezzo PriceCharting non gradato. Collezione e portafoglio lo convertono nella tua valuta. Serve un token API in Sincronizzazione dati per caricare i prezzi mancanti.',
     tcgdexSyncLanguages: 'Lingue sync TCGdex',
     tcgdexSyncLanguagesDesc: 'Scegli quali lingue il sync completo set/carte TCGdex deve recuperare. Lingue aggiuntive aumentano tempo di sync, chiamate API e dimensione database. Il sync prezzi non cambia.',
     tcgdexSyncLanguagesSelected: 'selezionate',
@@ -807,6 +813,8 @@ const it = {
     priceInterval: 'Intervallo sync piccolo automatico',
     syncPricesOnlyDesc: 'Aggiorna i prezzi per tutte le carte tracciate in collezione, lista desideri e raccoglitori senza limite o cooldown del piccolo sync.',
     autoSmallSyncDesc: 'La sincronizzazione automatica in background esegue il piccolo sync prezzi.',
+    pricechartingToken: 'Token API PriceCharting',
+    pricechartingTokenDesc: 'Token Legendary di PriceCharting.com. Puoi anche impostare PRICECHARTING_API_TOKEN nel .env. Massimo 1 richiesta al secondo. Se la fonte prezzi è PriceCharting e la valuta è USD, la prossima sync prezzi aggiorna i prezzi non gradati in background.',
     // Sync interval options (days)
     day1: '1 giorno',
     days2: '2 giorni',
@@ -849,6 +857,8 @@ const it = {
     history: 'Storico prezzi',
     sinceTracking: 'da inizio tracciamento',
     cardmarketTitle: 'Prezzi Cardmarket',
+    pricechartingLoading: 'Caricamento PriceCharting…',
+    salesVolumeYear: '{count} vendute nell’ultimo anno',
   },
 
   // Set Detail

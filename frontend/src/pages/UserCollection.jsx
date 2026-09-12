@@ -15,7 +15,7 @@ import { CardDisplay, CardLegend, withCollectionItemState } from '../components/
 export default function UserCollection() {
   const { userId } = useParams()
   const navigate = useNavigate()
-  const { t, formatPrice, pricePrimaryField } = useSettings()
+  const { t, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate, valuationParams } = useSettings()
   const [selectedCard, setSelectedCard] = useState(null)
   const [searchText, setSearchText] = useState('')
   const [showFilters, setShowFilters] = useState(false)
@@ -26,8 +26,8 @@ export default function UserCollection() {
   const [sortOrder, setSortOrder] = useState('asc')
 
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ['user-collection', userId, pricePrimaryField],
-    queryFn: () => getUserCollection(userId, { price_field: pricePrimaryField }),
+    queryKey: ['user-collection', userId, valuationParams],
+    queryFn: () => getUserCollection(userId, valuationParams),
   })
 
   const rarities = useMemo(() => {
@@ -73,7 +73,7 @@ export default function UserCollection() {
       let valA, valB
       switch (sortBy) {
         case 'name': valA = a.card?.name || ''; valB = b.card?.name || ''; break
-        case 'price': valA = getEffectiveCardPrice(a.card, a.variant, pricePrimaryField); valB = getEffectiveCardPrice(b.card, b.variant, pricePrimaryField); break
+        case 'price': valA = getEffectiveCardPrice(a.card, a.variant, pricePrimaryField, searchPriceSource, usdToEurRate); valB = getEffectiveCardPrice(b.card, b.variant, pricePrimaryField, searchPriceSource, usdToEurRate); break
         case 'quantity': valA = a.quantity; valB = b.quantity; break
         case 'rarity': valA = a.card?.rarity || ''; valB = b.card?.rarity || ''; break
         default: valA = a.card?.name || ''; valB = b.card?.name || ''
@@ -85,9 +85,9 @@ export default function UserCollection() {
     })
 
     return result
-  }, [items, searchText, filterRarity, filterVariant, filterLang, sortBy, sortOrder, pricePrimaryField])
+  }, [items, searchText, filterRarity, filterVariant, filterLang, sortBy, sortOrder, pricePrimaryField, searchPriceSource, usdToEurRate])
 
-  const totalValue = filtered.reduce((sum, item) => sum + getEffectiveCardPrice(item.card, item.variant, pricePrimaryField) * item.quantity, 0)
+  const totalValue = filtered.reduce((sum, item) => sum + getEffectiveCardPrice(item.card, item.variant, pricePrimaryField, searchPriceSource, usdToEurRate) * item.quantity, 0)
   const totalCards = filtered.reduce((sum, item) => sum + item.quantity, 0)
 
   const resetFilters = () => {
@@ -208,7 +208,7 @@ export default function UserCollection() {
             const card = item.card
             if (!card) return null
             const imgSrc = resolveCardImageUrl(card)
-            const price = getEffectiveCardPrice(card, item.variant, pricePrimaryField)
+            const price = getEffectiveCardPrice(card, item.variant, pricePrimaryField, searchPriceSource, usdToEurRate)
             return (
               <CardDisplay
                 key={item.id}

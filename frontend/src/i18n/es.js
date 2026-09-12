@@ -624,7 +624,13 @@ const es = {
     currency: 'Moneda',
     currencyDesc: 'Visualización de precios',
     priceType: 'Tipo de precio',
-    priceTypeDesc: 'Qué precio de Cardmarket se muestra',
+    priceTypeDesc: 'Qué métrica de Cardmarket se usa cuando la fuente de precio es Cardmarket',
+    priceSource: 'Fuente de precio',
+    priceSourceDesc: 'Qué mercado se usa para búsqueda, colección y cartera',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (sin graduar)',
+    priceSourcePricechartingDesc: 'Precio PriceCharting sin graduar. La colección y la cartera lo convierten a tu moneda. Se necesita un token de API en Sincronización de datos para cargar precios que aún no estén en caché.',
     tcgdexSyncLanguages: 'Idiomas de sincronización TCGdex',
     tcgdexSyncLanguagesDesc: 'Elige qué idiomas debe obtener la sincronización completa de series/cartas de TCGdex. Los idiomas extra aumentan el tiempo de sincronización, las llamadas API y el tamaño de la base de datos. La sincronización de precios no se ve afectada.',
     tcgdexSyncLanguagesSelected: 'seleccionados',
@@ -807,6 +813,8 @@ const es = {
     priceInterval: 'Intervalo automático de sincronización pequeña',
     syncPricesOnlyDesc: 'Actualizar precios de todas las cartas rastreadas de colección, lista de deseos y carpetas sin el límite ni el enfriamiento de la sincronización pequeña.',
     autoSmallSyncDesc: 'La sincronización automática en segundo plano ejecuta la sincronización pequeña de precios.',
+    pricechartingToken: 'Token de API de PriceCharting',
+    pricechartingTokenDesc: 'Token Legendary de PriceCharting.com. También puedes usar PRICECHARTING_API_TOKEN en .env. Máximo 1 solicitud por segundo. Si la fuente de precios es PriceCharting y la moneda es USD, la siguiente sincronización de precios actualiza los precios sin graduar en segundo plano.',
     // Sync interval options (days)
     day1: '1 día',
     days2: '2 días',
@@ -849,6 +857,8 @@ const es = {
     history: 'Historial de precios',
     sinceTracking: 'desde el seguimiento',
     cardmarketTitle: 'Precios de Cardmarket',
+    pricechartingLoading: 'Cargando PriceCharting…',
+    salesVolumeYear: '{count} vendidas en el último año',
   },
 
   // Set Detail

@@ -9,6 +9,7 @@ from api.cards import _card_to_dict
 from database import get_db
 from models import Card, CollectionItem, ProductPurchase, Set, User, WishlistItem
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import normalize_search_price_source
 from services.card_visibility import visible_card_filter
 from services.digital_sets import digital_sets_enabled
 from services.public_profile_feature import public_profiles_enabled
@@ -199,12 +200,13 @@ def _card_payload(card: Card | None):
     return payload
 
 
-def _load_user_stats(db: Session, user_ids: list[int] | None = None, price_field: str = "price_trend"):
+def _load_user_stats(db: Session, user_ids: list[int] | None = None, price_field: str = "price_trend", price_source: str = "cardmarket"):
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     sharing_enabled = public_profiles_enabled(db)
 
     def _get_price(row):
-        return effective_market_price(row, getattr(row, "variant", None), price_field)
+        return effective_market_price(row, getattr(row, "variant", None), price_field, price_source)
 
     user_query = db.query(User).filter(User.is_active == True)
     if user_ids is not None:
@@ -310,7 +312,7 @@ def _load_user_stats(db: Session, user_ids: list[int] | None = None, price_field
         rows = items_by_user.get(user.id, [])
         total_cards = sum(row.quantity or 0 for row in rows)
         unique_card_ids = {row.card_id for row in rows}
-        valuation = calculate_portfolio_valuation(db, user.id, price_field)
+        valuation = calculate_portfolio_valuation(db, user.id, price_field, price_source=price_source)
 
         most_valuable = None
         if rows:
@@ -389,10 +391,11 @@ def _load_user_stats(db: Session, user_ids: list[int] | None = None, price_field
 @router.get("/leaderboard")
 def get_leaderboard(
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stats = _load_user_stats(db, price_field=price_field)
+    stats = _load_user_stats(db, price_field=price_field, price_source=price_source)
     leaderboard = sorted(
         stats.values(),
         key=lambda entry: (entry["total_value"], entry["total_cards"], entry["unique_cards"]),
@@ -405,6 +408,7 @@ def get_leaderboard(
 def compare_users(
     user_id: int,
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -415,7 +419,7 @@ def compare_users(
     if not other_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    stats = _load_user_stats(db, [current_user.id, user_id], price_field=price_field)
+    stats = _load_user_stats(db, [current_user.id, user_id], price_field=price_field, price_source=price_source)
     if current_user.id not in stats or user_id not in stats:
         raise HTTPException(status_code=404, detail="Comparison users not found")
 
@@ -527,6 +531,7 @@ def compare_users(
 def get_achievements(
     user_id: int,
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -534,7 +539,7 @@ def get_achievements(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    stats = _load_user_stats(db, [user_id], price_field=price_field).get(user_id)
+    stats = _load_user_stats(db, [user_id], price_field=price_field, price_source=price_source).get(user_id)
     if not stats:
         raise HTTPException(status_code=404, detail="User stats not found")
 

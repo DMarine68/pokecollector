@@ -17,6 +17,7 @@ from services.standard_legality import is_standard_legal_card, is_standard_regul
 from services.tcgdex_languages import SUPPORTED_TCGDEX_LANGUAGES, has_lang_suffix, is_supported_tcgdex_language, normalize_tcgdex_language
 from services.collection_csv import collection_import_key, is_valid_collection_purchase_price, merge_collection_import_item, normalize_collection_variant
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import normalize_search_price_source
 import datetime
 import csv
 import io
@@ -38,9 +39,9 @@ def _normalize_collection_variant(variant: Optional[str]) -> str:
 
 _SET_CODE_API_CACHE: Optional[dict[str, dict[str, List[dict]]]] = None
 
-def _get_item_price(item, price_field="price_trend"):
+def _get_item_price(item, price_field="price_trend", price_source="cardmarket"):
     """Return the selected market price for a collection item, respecting holo variant."""
-    return effective_market_price(item.card, item.variant, price_field)
+    return effective_market_price(item.card, item.variant, price_field, price_source)
 
 
 def _collection_standard_legal_fingerprints(db: Session) -> set[str]:
@@ -1009,6 +1010,7 @@ def get_collection_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Get collection statistics."""
     items = db.query(CollectionItem).join(Card, Card.id == CollectionItem.card_id).options(
@@ -1021,8 +1023,9 @@ def get_collection_stats(
     total_cards = sum(item.quantity for item in items)
     unique_cards = len(set(item.card_id for item in items))
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     total_value = sum(
-        _get_item_price(item, price_field) * item.quantity
+        _get_item_price(item, price_field, price_source) * item.quantity
         for item in items
         if item.card
     )

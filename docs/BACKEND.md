@@ -239,6 +239,10 @@ Important behavior:
 - `recognize.py` intentionally reads Gemini only from the current user's `UserSetting`; there is no cross-user fallback
 - `scan_diagnostics_enabled` is off by default and is effective only when the server configures `SCAN_TRACE_DIR`
 
+## Image cache
+
+Card, set, and product images are proxied through `/api/images/*`. After the first fetch, bytes are stored on disk under `CARD_IMAGE_CACHE_DIR` (Compose default `/app/data/card-images`) and served with `FileResponse`. Existing `image_cache` database rows are still read as a fallback and copied onto disk. Settings → Clear image cache deletes the folder and truncates `image_cache`.
+
 ## Sync & Backup Behavior
 
 ### Sync

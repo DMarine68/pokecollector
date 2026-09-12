@@ -31,6 +31,7 @@ from schemas import (
 )
 from services import pokemon_api
 from services.card_values import normalize_price_field
+from services.search_price_source import normalize_search_price_source
 from services.binder_allocations import collection_item_allocated_quantity
 from services.image_url_security import validate_public_https_image_url
 from services.product_ledger import (
@@ -250,7 +251,7 @@ def _ledger_entry_response(entry: ProductLedgerEntry) -> ProductLedgerEntryRespo
     )
 
 
-def _product_card_response(entry: ProductCard, price_field: str) -> ProductCardResponse:
+def _product_card_response(entry: ProductCard, price_field: str, price_source: str = "cardmarket") -> ProductCardResponse:
     return ProductCardResponse(
         id=entry.id,
         product_id=entry.product_id,
@@ -264,7 +265,7 @@ def _product_card_response(entry: ProductCard, price_field: str) -> ProductCardR
         lang=entry.lang,
         purchase_price=entry.purchase_price,
         linked_at=entry.linked_at,
-        live_value=entry_live_value(entry, price_field),
+        live_value=entry_live_value(entry, price_field, price_source),
         realized_gains=entry_realized_value(entry),
         card=entry.card,
         ledger_entries=[_ledger_entry_response(ledger_entry) for ledger_entry in entry.ledger_entries],
@@ -276,8 +277,9 @@ def _product_response(
     product_cards: list[ProductCard],
     flat_ledger_entries: list[ProductLedgerEntry],
     price_field: str,
+    price_source: str = "cardmarket",
 ) -> ProductPurchaseResponse:
-    effective_value, value_source, totals = product_effective_value(product, product_cards, price_field, flat_ledger_entries)
+    effective_value, value_source, totals = product_effective_value(product, product_cards, price_field, flat_ledger_entries, price_source)
     pnl = None
     pnl_percent = None
     if effective_value is not None and value_source not in {"opened_unlinked", "needs_review"}:
@@ -314,7 +316,7 @@ def _product_response(
         linked_cards_count=totals.linked_cards_count,
         active_linked_cards_count=totals.active_cards_count,
         sold_linked_cards_count=totals.sold_cards_count,
-        product_cards=[_product_card_response(entry, price_field) for entry in product_cards],
+        product_cards=[_product_card_response(entry, price_field, price_source) for entry in product_cards],
         ledger_entries=[_ledger_entry_response(entry) for entry in flat_ledger_entries],
     )
 
@@ -482,10 +484,10 @@ def _add_and_link_book_cards(
     )
 
 
-def _refresh_product_response(db: Session, current_user: User, product: ProductPurchase, price_field: str) -> ProductPurchaseResponse:
+def _refresh_product_response(db: Session, current_user: User, product: ProductPurchase, price_field: str, price_source: str = "cardmarket") -> ProductPurchaseResponse:
     product_cards = _load_product_cards(db, current_user, product.id)
     flat_ledger_entries = _load_flat_ledger_entries(db, current_user, product.id)
-    return _product_response(product, product_cards, flat_ledger_entries, price_field)
+    return _product_response(product, product_cards, flat_ledger_entries, price_field, price_source)
 
 
 def _product_responses(
@@ -493,6 +495,7 @@ def _product_responses(
     current_user: User,
     products: list[ProductPurchase],
     price_field: str,
+    price_source: str = "cardmarket",
 ) -> list[ProductPurchaseResponse]:
     if not products:
         return []
@@ -525,6 +528,7 @@ def _product_responses(
             cards_by_product[product.id],
             ledger_by_product[product.id],
             price_field,
+            price_source,
         )
         for product in products
     ]
@@ -541,9 +545,11 @@ def get_products(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Get all product purchases with dynamic linked-card valuation fields."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     products = db.query(ProductPurchase).filter(
         ProductPurchase.user_id == current_user.id
     ).order_by(
@@ -552,7 +558,7 @@ def get_products(
         ProductPurchase.id.asc(),
     ).all()
 
-    return _product_responses(db, current_user, products, price_field)
+    return _product_responses(db, current_user, products, price_field, price_source)
 
 
 @router.post("/", response_model=ProductPurchaseResponse)
@@ -806,14 +812,16 @@ def get_products_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Get product investment summary (broker-style P&L)."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     products = db.query(ProductPurchase).filter(
         ProductPurchase.user_id == current_user.id
     ).all()
 
-    product_responses = _product_responses(db, current_user, products, price_field)
+    product_responses = _product_responses(db, current_user, products, price_field, price_source)
 
     total_invested = sum(p.purchase_price for p in product_responses)
     total_current_value = sum(
@@ -884,10 +892,11 @@ def get_product(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Get one product with its linked-card ledger."""
     product = _get_product_or_404(db, current_user, product_id)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))
 
 
 @router.post("/{product_id}/cards", response_model=ProductPurchaseResponse)
@@ -897,6 +906,7 @@ def link_collection_item_to_product(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Link exact owned collection copies to a product without removing them from active inventory."""
     product = _get_product_or_404(db, current_user, product_id, lock=True)
@@ -907,7 +917,7 @@ def link_collection_item_to_product(
 
     db.commit()
     db.refresh(product)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))
 
 
 @router.post("/{product_id}/cards/bulk", response_model=ProductPurchaseResponse)
@@ -917,6 +927,7 @@ def link_collection_items_to_product(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Link multiple exact collection rows to one product transactionally."""
     product = _get_product_or_404(db, current_user, product_id, lock=True)
@@ -927,7 +938,7 @@ def link_collection_items_to_product(
 
     db.commit()
     db.refresh(product)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))
 
 
 @router.post("/{product_id}/book-cards", response_model=ProductPurchaseResponse)
@@ -963,6 +974,7 @@ def unlink_product_card(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Remove an active product-card link without touching collection inventory."""
     product = _get_product_or_404(db, current_user, product_id, lock=True)
@@ -982,7 +994,7 @@ def unlink_product_card(
     db.delete(product_card)
     db.commit()
     db.refresh(product)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))
 
 
 @router.post("/{product_id}/cards/{product_card_id}/sell", response_model=ProductPurchaseResponse)
@@ -993,6 +1005,7 @@ def sell_product_card(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Mark linked card copies as sold, remove them from active collection, and keep ledger history."""
     product = _get_product_or_404(db, current_user, product_id, lock=True)
@@ -1080,7 +1093,7 @@ def sell_product_card(
 
     db.commit()
     db.refresh(product)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))
 
 
 @router.post("/{product_id}/ledger", response_model=ProductPurchaseResponse)
@@ -1090,6 +1103,7 @@ def add_product_ledger_entry(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Cardmarket price field for linked-card valuation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
 ):
     """Add a flat realized gain to a product ledger."""
     product = _get_product_or_404(db, current_user, product_id, lock=True)
@@ -1118,4 +1132,4 @@ def add_product_ledger_entry(
     product.lifecycle_status = "opened"
     db.commit()
     db.refresh(product)
-    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field))
+    return _refresh_product_response(db, current_user, product, normalize_price_field(price_field), normalize_search_price_source(price_source))

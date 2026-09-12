@@ -5,6 +5,9 @@ from api.collection import _annotate_scan_photos
 from database import get_db
 from models import CollectionItem, Card, Set, PortfolioSnapshot, SyncLog, User
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import (
+    normalize_search_price_source,
+)
 from services.card_visibility import visible_any_card_filter, visible_set_filter
 from services.portfolio_valuation import (
     PORTFOLIO_CALCULATION_VERSION,
@@ -20,10 +23,12 @@ router = APIRouter()
 def get_dashboard(
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     current_user: User = Depends(get_current_user),
 ):
     """Get dashboard statistics."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
 
     # Collection stats
     items = db.query(CollectionItem).join(Card, Card.id == CollectionItem.card_id).options(
@@ -42,6 +47,7 @@ def get_dashboard(
         current_user.id,
         price_field,
         collection_items=items,
+        price_source=price_source,
     )
     total_value = valuation.total_value
     total_cost = valuation.active_cost_basis
@@ -60,7 +66,7 @@ def get_dashboard(
     def card_value(item):
         if not item.card:
             return 0
-        return effective_market_price(item.card, item.variant, price_field) * item.quantity
+        return effective_market_price(item.card, item.variant, price_field, price_source) * item.quantity
 
     top_cards = sorted(
         [item for item in items if item.card],
@@ -71,7 +77,7 @@ def get_dashboard(
     top_cards_data = []
     for item in top_cards:
         card = item.card
-        display_price = effective_market_price(card, item.variant, price_field)
+        display_price = effective_market_price(card, item.variant, price_field, price_source)
         top_cards_data.append({
             "id": card.id,
             "collection_item_id": item.id,
@@ -142,7 +148,7 @@ def get_dashboard(
                 "condition": item.condition,
                 "lang": item.lang,
                 "added_at": item.added_at.isoformat() if item.added_at else None,
-                "price_market": effective_market_price(item.card, item.variant, price_field),
+                "price_market": effective_market_price(item.card, item.variant, price_field, price_source),
                 "is_custom": item.card.is_custom,
                 "custom_image_url": item.card.custom_image_url,
                 "data_source_lang": item.card.data_source_lang,

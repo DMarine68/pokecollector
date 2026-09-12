@@ -7,6 +7,7 @@ vi.mock('../contexts/SettingsContext', () => ({
   useSettings: () => ({
     t: (key, params) => {
       if (key === 'prices.multiplier') return '{mult}x vs raw'
+      if (key === 'prices.salesVolumeYear') return `${params.count} sold in the last year`
       if (params?.lang) return `Price fallback from ${params.lang}`
       return key
     },
@@ -21,24 +22,27 @@ vi.mock('../contexts/SettingsContext', () => ({
 vi.mock('@tanstack/react-query', () => ({
   useQuery: ({ queryKey }) => {
     if (queryKey[0] === 'pricecharting') {
-      return {
-        data: {
-          card_id: 'me04-111_en',
-          search_url: 'https://www.pricecharting.com/search-products?type=prices&q=Misty%27s+Vitality+111',
-          has_live_data: true,
-          grades: [
-            { id: 'ungraded', name: 'Ungraded', label: 'Raw / NM', price: 18.47, multiplier: 1.0 },
-            { id: 'grade_7', name: 'Grade 7', label: 'Near Mint', price: 19.39, multiplier: 1.05 },
-            { id: 'grade_8', name: 'Grade 8', label: 'NM-Mint', price: 24.93, multiplier: 1.35 },
-            { id: 'grade_9', name: 'Grade 9', label: 'Mint', price: 62.50, multiplier: 3.38 },
-            { id: 'grade_9_5', name: 'Grade 9.5', label: 'Gem Mint', price: 69.00, multiplier: 3.74 },
-            { id: 'psa_10', name: 'PSA 10', label: 'Gem Mint / Pristine', price: 184.34, multiplier: 9.98, is_psa10: true },
-          ],
-        },
-        isLoading: false,
+      const cardId = queryKey[1]
+      const liveData = {
+        card_id: 'me04-111_en',
+        search_url: 'https://www.pricecharting.com/search-products?type=prices&q=Misty%27s+Vitality+111',
+        has_live_data: true,
+        sales_volume_year: 47,
+        grades: [
+          { id: 'ungraded', name: 'Ungraded', label: 'Raw / NM', price: 18.47, multiplier: 1.0 },
+          { id: 'grade_7', name: 'Grade 7', label: 'Near Mint', price: 19.39, multiplier: 1.05 },
+          { id: 'grade_8', name: 'Grade 8', label: 'NM-Mint', price: 24.93, multiplier: 1.35 },
+          { id: 'grade_9', name: 'Grade 9', label: 'Mint', price: 62.50, multiplier: 3.38 },
+          { id: 'grade_9_5', name: 'Grade 9.5', label: 'Gem Mint', price: 69.00, multiplier: 3.74 },
+          { id: 'psa_10', name: 'PSA 10', label: 'Gem Mint / Pristine', price: 184.34, multiplier: 9.98, is_psa10: true },
+        ],
       }
+      if (cardId !== 'me04-111_en') {
+        return { data: liveData, isFetching: true, isPending: false }
+      }
+      return { data: liveData, isFetching: false, isPending: false }
     }
-    return { data: [], isLoading: false }
+    return { data: [], isLoading: false, isFetching: false, isPending: false }
   },
 }))
 
@@ -88,6 +92,7 @@ describe('CardPricesTab', () => {
     expect(markup).toContain('Grade 9.5')
     expect(markup).toContain('PSA 10')
     expect(markup).toContain('$184.34')
+    expect(markup).toContain('47 sold in the last year')
     expect(markup).toContain('9.98x vs raw')
     expect(markup).toContain('prices.rawBaseline')
     expect(markup).not.toContain('{mult}')
@@ -121,5 +126,21 @@ describe('CardPricesTab', () => {
     expect(markup).toContain('prices.totalVal')
     expect(markup).toContain('€20.00')
     expect(markup).toContain('€50.00')
+  })
+
+  it('shows a loading state instead of another card\'s PriceCharting prices', () => {
+    const markup = renderToStaticMarkup(createElement(CardPricesTab, {
+      card: {
+        id: 'sv1-1_en',
+        name: 'Pikachu',
+        number: '1',
+        price_trend: 4.00,
+      },
+      variant: 'Normal',
+    }))
+
+    expect(markup).toContain('prices.pricechartingLoading')
+    expect(markup).not.toContain('$184.34')
+    expect(markup).not.toContain('47 sold in the last year')
   })
 })

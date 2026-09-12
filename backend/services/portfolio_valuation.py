@@ -126,6 +126,7 @@ def calculate_portfolio_valuation(
     user_id: int,
     price_field: str = "price_trend",
     collection_items: Iterable[CollectionItem] | None = None,
+    price_source: str = "cardmarket",
 ) -> PortfolioValuation:
     """Calculate the authoritative combined card and product valuation.
 
@@ -143,7 +144,7 @@ def calculate_portfolio_valuation(
     items = list(collection_items) if collection_items is not None else _collection_items(db, user_id)
 
     card_value = sum(
-        effective_market_price(item.card, item.variant, price_field) * int(item.quantity or 0)
+        effective_market_price(item.card, item.variant, price_field, price_source) * int(item.quantity or 0)
         for item in items
         if item.card
     )
@@ -202,6 +203,7 @@ def calculate_portfolio_valuation(
                 linked_entries,
                 price_field,
                 flat_entries,
+                price_source,
             )
             product_returns += float(effective_value or 0)
             realized_value += float(totals.realized_gains or 0)
@@ -236,7 +238,7 @@ def calculate_portfolio_valuation(
         product_cost_basis += purchase_price
 
     linked_cards_value = sum(
-        effective_market_price(entry.card, entry.variant, price_field) * max(int(entry.active_quantity or 0), 0)
+        effective_market_price(entry.card, entry.variant, price_field, price_source) * max(int(entry.active_quantity or 0), 0)
         for entry in product_cards
         if entry.card
     )

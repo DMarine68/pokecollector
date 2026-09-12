@@ -624,7 +624,13 @@ const pl = {
     currency: 'Waluta',
     currencyDesc: 'Wyświetlanie cen',
     priceType: 'Typ ceny',
-    priceTypeDesc: 'Która cena Cardmarket jest wyświetlana',
+    priceTypeDesc: 'Która metryka Cardmarket jest używana, gdy źródłem ceny jest Cardmarket',
+    priceSource: 'Źródło ceny',
+    priceSourceDesc: 'Który rynek jest używany do wyszukiwania, kolekcji i portfela',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (bez gradingu)',
+    priceSourcePricechartingDesc: 'Nieoceniona cena PriceCharting. Kolekcja i portfel przeliczają ją na twoją walutę. Token API w synchronizacji danych jest wymagany, aby wczytać brakujące ceny.',
     tcgdexSyncLanguages: 'Języki synchronizacji TCGdex',
     tcgdexSyncLanguagesDesc: 'Wybierz, które języki ma pobierać pełna synchronizacja zestawów/kart TCGdex. Dodatkowe języki zwiększają czas synchronizacji, liczbę wywołań API i rozmiar bazy danych. Synchronizacja cen pozostaje bez zmian.',
     tcgdexSyncLanguagesSelected: 'wybrane',
@@ -807,6 +813,8 @@ const pl = {
     priceInterval: 'Interwał automatycznej małej synchronizacji',
     syncPricesOnlyDesc: 'Odśwież ceny wszystkich śledzonych kart w kolekcji, liście życzeń i segregatorach bez limitu małej synchronizacji ani czasu odnowienia.',
     autoSmallSyncDesc: 'Automatyczna synchronizacja w tle uruchamia małą synchronizację cen.',
+    pricechartingToken: 'Token API PriceCharting',
+    pricechartingTokenDesc: 'Token Legendary z PriceCharting.com. Możesz też ustawić PRICECHARTING_API_TOKEN w .env. Maks. 1 żądanie na sekundę. Gdy źródłem cen jest PriceCharting, a walutą USD, kolejna synchronizacja cen odświeża ceny bez gradingu w tle.',
     // Sync interval options (days)
     day1: '1 dzień',
     days2: '2 dni',
@@ -849,6 +857,8 @@ const pl = {
     history: 'Historia cen',
     sinceTracking: 'od początku śledzenia',
     cardmarketTitle: 'Ceny Cardmarket',
+    pricechartingLoading: 'Ładowanie PriceCharting…',
+    salesVolumeYear: '{count} sprzedanych w ostatnim roku',
   },
 
   // Set Detail

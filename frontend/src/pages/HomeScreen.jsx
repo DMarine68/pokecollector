@@ -128,13 +128,13 @@ function ProductValueInfo({ label, detailsLabel, explanation }) {
 export default function HomeScreen() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { formatPrice, t, pricePrimaryField, settings, updateSettings } = useSettings()
+  const { formatPrice, t, valuationParams, settings, updateSettings } = useSettings()
   const { user, logout, multiUser } = useAuth()
   const [chartPeriod, setChartPeriod] = useState('1W')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', pricePrimaryField],
-    queryFn: () => getDashboard({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['dashboard', valuationParams],
+    queryFn: () => getDashboard(valuationParams).then(r => r.data),
     refetchInterval: 60000,
   })
 
@@ -155,8 +155,8 @@ export default function HomeScreen() {
 
   // Portfolio history for chart — uses analytics/investment-tracker
   const { data: investmentData = [] } = useQuery({
-    queryKey: ['investment-tracker', chartPeriod, pricePrimaryField],
-    queryFn: () => getInvestmentTracker({ period: portfolioApiPeriod(chartPeriod), price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['investment-tracker', chartPeriod, valuationParams],
+    queryFn: () => getInvestmentTracker({ period: portfolioApiPeriod(chartPeriod), ...valuationParams }).then(r => r.data),
     refetchInterval: 120000,
   })
 

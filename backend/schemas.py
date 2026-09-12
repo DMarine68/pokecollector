@@ -87,6 +87,8 @@ class CardBase(BaseModel):
     price_tcg_holo_low: Optional[float] = None
     price_tcg_holo_mid: Optional[float] = None
     price_tcg_holo_market: Optional[float] = None
+    price_pc_ungraded: Optional[float] = None
+    price_pc_synced_at: Optional[datetime] = None
     price_source_lang: Optional[str] = None
     # Variants
     variants_normal: Optional[bool] = None
@@ -260,6 +262,7 @@ class PriceChartingResponse(BaseModel):
     grade_9: Optional[float] = None
     grade_9_5: Optional[float] = None
     psa_10: Optional[float] = None
+    sales_volume_year: Optional[int] = None
     grades: List[PriceChartingGrade] = Field(default_factory=list)
 
 

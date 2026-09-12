@@ -624,7 +624,13 @@ const ko = {
     currency: '통화',
     currencyDesc: '가격 표시',
     priceType: '가격 유형',
-    priceTypeDesc: '표시할 Cardmarket 가격',
+    priceTypeDesc: '가격 출처가 Cardmarket일 때 사용할 Cardmarket 지표',
+    priceSource: '가격 출처',
+    priceSourceDesc: '검색, 컬렉션, 포트폴리오에 사용할 시장 가격',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (미등급)',
+    priceSourcePricechartingDesc: 'PriceCharting 미등급 가격입니다. 컬렉션과 포트폴리오는 표시 통화로 환산합니다. 캐시되지 않은 가격을 불러오려면 데이터 동기화의 API 토큰이 필요합니다.',
     tcgdexSyncLanguages: 'TCGdex 동기화 언어',
     tcgdexSyncLanguagesDesc: '전체 TCGdex 세트/카드 동기화에서 가져올 언어를 선택하세요. 추가 언어는 동기화 시간, API 호출, 데이터베이스 크기를 늘립니다. 가격 동기화에는 영향이 없습니다.',
     tcgdexSyncLanguagesSelected: '선택됨',
@@ -807,6 +813,8 @@ const ko = {
     priceInterval: '자동 소규모 동기화 간격',
     syncPricesOnlyDesc: '소규모 동기화 제한이나 대기시간 없이 모든 추적 컬렉션, 위시리스트, 바인더 카드의 가격을 새로고침합니다.',
     autoSmallSyncDesc: '자동 백그라운드 동기화는 소규모 가격 동기화를 실행합니다.',
+    pricechartingToken: 'PriceCharting API 토큰',
+    pricechartingTokenDesc: 'PriceCharting.com Legendary API 토큰입니다. .env의 PRICECHARTING_API_TOKEN으로도 설정할 수 있습니다. 초당 1회 요청. 가격 출처가 PriceCharting이고 통화가 USD이면 다음 가격 동기화가 미등급 가격을 백그라운드에서 갱신합니다.',
     // Sync interval options (days)
     day1: '1일',
     days2: '2일',
@@ -849,6 +857,8 @@ const ko = {
     history: '가격 기록',
     sinceTracking: '추적 시작 이후',
     cardmarketTitle: 'Cardmarket 가격',
+    pricechartingLoading: 'PriceCharting 불러오는 중…',
+    salesVolumeYear: '지난 1년 {count}건 판매',
   },
 
   // Set Detail

@@ -6,7 +6,8 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from models import Card, ImageCache, Set
+from models import Card, Set
+from services.image_disk_cache import purge_keys
 from services.price_utils import preserve_existing_prices_for_invalid_update
 
 
@@ -35,10 +36,10 @@ def upsert_card(db: Session, card_data: dict) -> Card:
                 setattr(existing, key, value)
         if has_api_image:
             existing.custom_image_url = None
-            db.query(ImageCache).filter(ImageCache.image_key.in_([
+            purge_keys(db, [
                 f"card:{existing.id}:small:custom",
                 f"card:{existing.id}:large:custom",
-            ])).delete(synchronize_session=False)
+            ])
     else:
         existing = Card(**card_data)
         db.add(existing)

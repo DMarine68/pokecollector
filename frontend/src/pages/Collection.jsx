@@ -259,7 +259,7 @@ function CsvImportModal({ t, onClose, onChooseFile, onDownloadTemplate, isImport
 // ─── CollectionEditModal ────────────────────────────────────────────────────
 // Opens when clicking any card in the collection. Allows editing + deleting.
 function CollectionEditModal({ item, onClose }) {
-  const { t, formatPrice, pricePrimaryField, exchangeRate, exchangeRateReady, settings } = useSettings()
+  const { t, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate, exchangeRate, exchangeRateReady, settings } = useSettings()
   const confirmDialog = useConfirmDialog()
   const queryClient = useQueryClient()
   const card = item.card
@@ -518,7 +518,7 @@ function CollectionEditModal({ item, onClose }) {
     )
   )
 
-  const marketPrice = getEffectiveCardPrice(card, item.variant, pricePrimaryField)
+  const marketPrice = getEffectiveCardPrice(card, item.variant, pricePrimaryField, searchPriceSource, usdToEurRate)
   const dialogTabs = [
     { id: 'overview', label: t('cardTabs.overview') },
     { id: 'prices', label: t('cardTabs.prices') },
@@ -644,7 +644,7 @@ function CollectionEditModal({ item, onClose }) {
       )}
 
       {activeTab === 'prices' && (
-        <CardPricesTab card={card} variant={item.variant} collectionItem={item} />
+        <CardPricesTab key={card?.id} card={card} variant={item.variant} collectionItem={item} />
       )}
 
       {activeTab === 'owned' && (
@@ -948,7 +948,7 @@ function CollectionEditModal({ item, onClose }) {
 }
 
 export default function Collection() {
-  const { t, settings, formatPrice, pricePrimaryField, currency, exchangeRate } = useSettings()
+  const { t, settings, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate, valuationParams, currency, exchangeRate } = useSettings()
   const visibleLanguages = useVisibleTcgdexLanguages()
   const [viewMode, setViewMode] = useState('grid')
   const [editingCollectionItem, setEditingCollectionItem] = useState(null) // for CollectionEditModal
@@ -1083,7 +1083,7 @@ export default function Collection() {
   }
 
   function getEffectivePrice(card, variant, primaryField = pricePrimaryField) {
-    return getEffectiveCardPrice(card, variant, primaryField)
+    return getEffectiveCardPrice(card, variant, primaryField, searchPriceSource, usdToEurRate)
   }
 
   const rarities = useMemo(() => [...new Set(items.map(i => i.card?.rarity).filter(Boolean))].sort(), [items])
@@ -1182,11 +1182,11 @@ export default function Collection() {
     })
 
     return result
-  }, [items, filterRarity, filterCondition, filterVariant, filterSet, filterType, filterCategories, filterSubtypes, filterLegality, filterLang, filterMinPrice, filterMaxPrice, filterDuplicates, searchText, sortBy, sortOrder, pricePrimaryField])
+  }, [items, filterRarity, filterCondition, filterVariant, filterSet, filterType, filterCategories, filterSubtypes, filterLegality, filterLang, filterMinPrice, filterMaxPrice, filterDuplicates, searchText, sortBy, sortOrder, pricePrimaryField, searchPriceSource, usdToEurRate])
 
   const totalValue = filtered.reduce((sum, item) => sum + (getEffectivePrice(item.card, item.variant) * item.quantity), 0)
   const totalCards = filtered.reduce((sum, item) => sum + item.quantity, 0)
-  const exportParams = { price_field: pricePrimaryField, currency, exchange_rate: exchangeRate }
+  const exportParams = { ...valuationParams, currency, exchange_rate: exchangeRate }
 
   const resetFilters = () => {
     setFilterRarity(''); setFilterCondition(''); setFilterVariant('')

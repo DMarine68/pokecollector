@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from typing import Optional, List
 from api.auth import get_current_user
 from database import get_db
-from models import Binder, BinderCard, Card, Set, PriceHistory, CustomCardMatch, CollectionItem, WishlistItem, User, ImageCache, ProductCard, ProductLedgerEntry, TradeItem
+from models import Binder, BinderCard, Card, Set, PriceHistory, CustomCardMatch, CollectionItem, WishlistItem, User, ProductCard, ProductLedgerEntry, TradeItem
 from schemas import CardBase, CardWithSet, PriceHistoryResponse, PriceChartingResponse, CardCustomCreate, CustomCardUpdate, CardCustomImageUpdate
 from services import pokemon_api
 from services.pricecharting import get_card_pricecharting_data
@@ -32,6 +32,7 @@ from services.card_visibility import (
 from services.digital_sets import digital_sets_enabled
 from services.display_language import get_tcgdex_display_language
 from services.image_url_security import validate_public_https_image_url
+from services.image_disk_cache import purge_card_images, purge_keys
 from services.card_numbers import card_number_matches
 from services.tcgdex_languages import english_fallback_languages, has_lang_suffix, is_supported_tcgdex_language, normalize_tcgdex_language
 from services.text_search import accent_insensitive_contains
@@ -128,6 +129,8 @@ def _card_to_dict(card: Card, current_user_id: int | None = None) -> dict:
         "price_tcg_holo_low": getattr(card, 'price_tcg_holo_low', None),
         "price_tcg_holo_mid": getattr(card, 'price_tcg_holo_mid', None),
         "price_tcg_holo_market": getattr(card, 'price_tcg_holo_market', None),
+        "price_pc_ungraded": getattr(card, "price_pc_ungraded", None),
+        "price_pc_synced_at": getattr(card, "price_pc_synced_at", None),
         "price_source_lang": getattr(card, "price_source_lang", None),
         "last_price_sync_success_at": getattr(card, "last_price_sync_success_at", None),
         "cardmarket_products": getattr(card, "cardmarket_products", None),
@@ -187,6 +190,15 @@ def _schedule_search_page_metadata_enrichment(
     ][:METADATA_ENRICHMENT_PER_SEARCH_PAGE]
     if card_ids:
         background_tasks.add_task(enrich_card_metadata_ids_in_background, card_ids)
+
+
+def _serialize_search_cards(db: Session, current_user: User, cards: List[Card]) -> List[dict]:
+    """Attach collection state. PriceCharting ungraded prices come from the last price sync."""
+    return _with_collection_summary(
+        db,
+        current_user,
+        [_card_to_dict(c, current_user.id) for c in cards],
+    )
 
 
 def _search_by_code_number(
@@ -312,7 +324,7 @@ def _search_by_code_number(
     start = (page - 1) * page_size
     page_cards = cards[start:start + page_size]
     _schedule_search_page_metadata_enrichment(background_tasks, page_cards)
-    card_dicts = _with_collection_summary(db, current_user, [_card_to_dict(c, current_user.id) for c in page_cards])
+    card_dicts = _serialize_search_cards(db, current_user, page_cards)
     return {
         "data": card_dicts,
         "total_count": len(cards),
@@ -408,9 +420,7 @@ def update_custom_card(
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
         if img != (card.images_small or "") or img != (card.images_large or ""):
-            db.query(ImageCache).filter(
-                ImageCache.image_key.like(f"card:{card_id}:%")
-            ).delete(synchronize_session=False)
+            purge_card_images(db, card_id)
         card.images_small = img
         card.images_large = img
     if update_data.get("is_shared_template") is None:
@@ -497,9 +507,7 @@ def delete_custom_card(
         db.query(BinderCard).filter(BinderCard.card_id == card_id).delete(synchronize_session=False)
         db.query(PriceHistory).filter(PriceHistory.card_id == card_id).delete(synchronize_session=False)
         db.query(CustomCardMatch).filter(CustomCardMatch.custom_card_id == card_id).delete(synchronize_session=False)
-        db.query(ImageCache).filter(
-            ImageCache.image_key.like(f"card:{card_id}:%")
-        ).delete(synchronize_session=False)
+        purge_card_images(db, card_id)
         db.query(ProductCard).filter(ProductCard.card_id == card_id).update({"card_id": None}, synchronize_session=False)
         db.query(ProductLedgerEntry).filter(ProductLedgerEntry.card_id == card_id).update({"card_id": None}, synchronize_session=False)
         db.query(TradeItem).filter(TradeItem.card_id == card_id).update({"card_id": None}, synchronize_session=False)
@@ -680,11 +688,7 @@ def search_cards(
         total_count = query.count()
         cards = query.offset((page - 1) * page_size).limit(page_size).all()
         _schedule_search_page_metadata_enrichment(background_tasks, cards)
-        card_dicts = _with_collection_summary(
-            db,
-            current_user,
-            [_card_to_dict(c, current_user.id) for c in cards],
-        )
+        card_dicts = _serialize_search_cards(db, current_user, cards)
 
         return {
             "data": card_dicts,
@@ -1065,7 +1069,7 @@ def update_card_custom_image(
     if card.images_small or card.images_large:
         if card.custom_image_url:
             card.custom_image_url = None
-            db.query(ImageCache).filter(ImageCache.image_key.in_(custom_cache_keys)).delete(synchronize_session=False)
+            purge_keys(db, custom_cache_keys)
             db.commit()
             db.refresh(card)
         return _card_to_dict(card)
@@ -1078,7 +1082,7 @@ def update_card_custom_image(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if card.custom_image_url != (image_url or None):
-        db.query(ImageCache).filter(ImageCache.image_key.in_(custom_cache_keys)).delete(synchronize_session=False)
+        purge_keys(db, custom_cache_keys)
     card.custom_image_url = image_url or None
     db.commit()
     db.refresh(card)

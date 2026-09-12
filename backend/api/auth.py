@@ -308,7 +308,6 @@ def delete_user(
         CollectionCardPhoto,
         CollectionItem,
         CustomCardMatch,
-        ImageCache,
         PortfolioSnapshot,
         PriceHistory,
         ProductCard,
@@ -319,6 +318,7 @@ def delete_user(
         UserSetting,
         WishlistItem,
     )
+    from services.image_disk_cache import purge_card_images
     owned_custom_card_ids = [
         card_id for (card_id,) in db.query(Card.id).filter(
             Card.is_custom == True,
@@ -354,9 +354,7 @@ def delete_user(
             TradeItem.card_id.in_(owned_custom_card_ids)
         ).update({"card_id": None}, synchronize_session=False)
         for card_id in owned_custom_card_ids:
-            db.query(ImageCache).filter(
-                ImageCache.image_key.like(f"card:{card_id}:%")
-            ).delete(synchronize_session=False)
+            purge_card_images(db, card_id)
         db.query(Card).filter(Card.id.in_(owned_custom_card_ids)).delete(
             synchronize_session=False
         )

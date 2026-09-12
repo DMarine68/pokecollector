@@ -624,7 +624,13 @@ const ja = {
     currency: '通貨',
     currencyDesc: '価格表示',
     priceType: '価格タイプ',
-    priceTypeDesc: '表示する Cardmarket 価格',
+    priceTypeDesc: '価格ソースが Cardmarket のときに使う Cardmarket 指標',
+    priceSource: '価格ソース',
+    priceSourceDesc: '検索・コレクション・ポートフォリオで使う市場価格',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting（未鑑定）',
+    priceSourcePricechartingDesc: 'PriceCharting の未鑑定価格です。コレクションとポートフォリオは表示通貨に換算します。未キャッシュの価格を取得するにはデータ同期の API トークンが必要です。',
     tcgdexSyncLanguages: 'TCGdex 同期言語',
     tcgdexSyncLanguagesDesc: 'TCGdex の完全なセット/カード同期で取得する言語を選択します。追加言語は同期時間、API 呼び出し、データベースサイズを増やします。価格同期には影響しません。',
     tcgdexSyncLanguagesSelected: '選択済み',
@@ -807,6 +813,8 @@ const ja = {
     priceInterval: '自動小規模同期間隔',
     syncPricesOnlyDesc: '小規模同期の上限やクールダウンなしで、追跡中のコレクション、ウィッシュリスト、バインダーのすべてのカード価格を更新します。',
     autoSmallSyncDesc: '自動バックグラウンド同期は小規模価格同期を実行します。',
+    pricechartingToken: 'PriceCharting APIトークン',
+    pricechartingTokenDesc: 'PriceCharting.com の Legendary API トークンです。.env の PRICECHARTING_API_TOKEN でも設定できます。1秒あたり1リクエストまで。価格ソースが PriceCharting で通貨が USD のとき、次の価格同期で未鑑定価格をバックグラウンド更新します。',
     // Sync interval options (days)
     day1: '1 日',
     days2: '2 日',
@@ -849,6 +857,8 @@ const ja = {
     history: '価格履歴',
     sinceTracking: '追跡開始以降',
     cardmarketTitle: 'Cardmarket 価格',
+    pricechartingLoading: 'PriceChartingを読み込み中…',
+    salesVolumeYear: '過去1年で{count}件売却',
   },
 
   // Set Detail

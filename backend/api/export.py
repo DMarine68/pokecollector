@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from api.auth import get_current_user
 from database import get_db
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import normalize_search_price_source
 from services.card_visibility import visible_any_card_filter
 from models import CollectionItem, Card, User
 import io
@@ -35,6 +36,7 @@ def _format_money(amount: float | None, symbol: str) -> str:
 @router.get("/csv")
 def export_csv(
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     currency: str = Query(default="EUR", description="Display currency"),
     exchange_rate: float = Query(default=1.0, gt=0, description="EUR to selected currency rate"),
     db: Session = Depends(get_db),
@@ -42,6 +44,7 @@ def export_csv(
 ):
     """Export collection as CSV."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     currency, symbol = _normalize_currency(currency)
     items = db.query(CollectionItem).join(Card, Card.id == CollectionItem.card_id).options(
         joinedload(CollectionItem.card).joinedload(Card.set_ref)
@@ -67,7 +70,7 @@ def export_csv(
         if not card:
             continue
         set_name = card.set_ref.name if card.set_ref else ""
-        current_price = effective_market_price(card, item.variant, price_field)
+        current_price = effective_market_price(card, item.variant, price_field, price_source)
         display_current_price = _convert_eur(current_price, exchange_rate, currency)
         display_purchase_price = _convert_eur(item.purchase_price, exchange_rate, currency)
         total_value = round((display_current_price or 0) * item.quantity, 2)
@@ -99,6 +102,7 @@ def export_csv(
 @router.get("/pdf")
 def export_pdf(
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     currency: str = Query(default="EUR", description="Display currency"),
     exchange_rate: float = Query(default=1.0, gt=0, description="EUR to selected currency rate"),
     db: Session = Depends(get_db),
@@ -106,6 +110,7 @@ def export_pdf(
 ):
     """Export collection as PDF."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     currency, symbol = _normalize_currency(currency)
     try:
         from reportlab.lib import colors
@@ -158,7 +163,7 @@ def export_pdf(
             if not card:
                 continue
             set_name = (card.set_ref.name[:20] if card.set_ref else "")
-            current_price = _convert_eur(effective_market_price(card, item.variant, price_field), exchange_rate, currency)
+            current_price = _convert_eur(effective_market_price(card, item.variant, price_field, price_source), exchange_rate, currency)
             purchase_price = _convert_eur(item.purchase_price, exchange_rate, currency)
             val = round((current_price or 0) * item.quantity, 2)
             total_value += val

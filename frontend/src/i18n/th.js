@@ -622,7 +622,13 @@ const th = {
     currency: 'สกุลเงิน',
     currencyDesc: 'การแสดงราคา',
     priceType: 'ประเภทราคา',
-    priceTypeDesc: 'ราคา Cardmarket ที่จะแสดง',
+    priceTypeDesc: 'ราคา Cardmarket ที่ใช้เมื่อแหล่งราคาคือ Cardmarket',
+    priceSource: 'แหล่งราคา',
+    priceSourceDesc: 'ตลาดที่ใช้สำหรับค้นหา คอลเลกชัน และพอร์ตโฟลิโอ',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (ไม่เกรด)',
+    priceSourcePricechartingDesc: 'ราคา PriceCharting แบบไม่เกรด คอลเลกชันและพอร์ตโฟลิโอจะแปลงเป็นสกุลเงินที่แสดง ต้องมี API token ใน Data Sync เพื่อโหลดราคาที่ยังไม่มีในแคช',
     tcgdexSyncLanguages: 'ภาษาในการซิงค์ TCGdex',
     tcgdexSyncLanguagesDesc: 'เลือกภาษาที่การซิงค์ชุด/การ์ด TCGdex แบบเต็มควรดึงมา ภาษาเพิ่มเติมจะเพิ่มเวลาซิงค์ จำนวน API call และขนาดฐานข้อมูล การซิงค์ราคาไม่ได้รับผลกระทบ',
     tcgdexSyncLanguagesSelected: 'เลือกแล้ว',
@@ -805,6 +811,8 @@ const th = {
     priceInterval: 'ช่วงเวลาซิงค์เล็กอัตโนมัติ',
     syncPricesOnlyDesc: 'รีเฟรชราคาสำหรับการ์ดในคอลเลกชัน รายการที่อยากได้ และแฟ้มทั้งหมดโดยไม่มีขีดจำกัดหรือคูลดาวน์ของ small-sync',
     autoSmallSyncDesc: 'การซิงค์พื้นหลังอัตโนมัติจะเรียกใช้การซิงค์ราคาแบบเล็ก',
+    pricechartingToken: 'โทเค็น API ของ PriceCharting',
+    pricechartingTokenDesc: 'โทเค็น Legendary จาก PriceCharting.com หรือตั้ง PRICECHARTING_API_TOKEN ใน .env ได้ คำขอได้สูงสุด 1 ครั้งต่อวินาที เมื่อแหล่งราคาเป็น PriceCharting และสกุลเงินเป็น USD การซิงค์ราคาครั้งถัดไปจะอัปเดตราคาไม่เกรดในพื้นหลัง',
     // Sync interval options (days)
     day1: '1 วัน',
     days2: '2 วัน',
@@ -847,6 +855,8 @@ const th = {
     history: 'ประวัติราคา',
     sinceTracking: 'ตั้งแต่เริ่มติดตาม',
     cardmarketTitle: 'ราคา Cardmarket',
+    pricechartingLoading: 'กำลังโหลด PriceCharting…',
+    salesVolumeYear: 'ขายได้ {count} ใบในปีที่แล้ว',
   },
 
   // Set Detail

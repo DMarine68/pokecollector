@@ -8,7 +8,7 @@ import { useSettings } from '../contexts/SettingsContext'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { resolveCardImageUrl, resolveSetImageUrl } from '../utils/imageUrl'
-import { HOLO_FIELD_MAP } from '../utils/prices'
+import { getEffectiveCardPrice } from '../utils/prices'
 import { useDetailBackNavigation, useScrollToTopOnPush } from '../hooks/useListScrollRestoration'
 import { CardDisplay, CardLegend } from '../components/card-system'
 import { CardModal } from '../components/CardItem'
@@ -38,31 +38,16 @@ function compareNumberLike(a, b) {
   return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' })
 }
 
-function positivePrice(value) {
-  if (value == null) return null
-  const price = Number(value)
-  return Number.isFinite(price) && price > 0 ? price : null
+function setSortPrice(card, pricePrimaryField, priceSource, usdToEur) {
+  return getEffectiveCardPrice(card, null, pricePrimaryField, priceSource, usdToEur)
 }
 
-function setSortPrice(card, pricePrimaryField) {
-  const holoField = HOLO_FIELD_MAP[pricePrimaryField]
-  const candidates = [
-    card?.[pricePrimaryField],
-    holoField ? card?.[holoField] : null,
-    card?.price_market_holo,
-    card?.price_market,
-  ]
-    .map(positivePrice)
-    .filter(price => price != null)
-  return candidates.length ? Math.max(...candidates) : 0
-}
-
-function sortSetCards(cards, sortBy, pricePrimaryField) {
+function sortSetCards(cards, sortBy, pricePrimaryField, priceSource, usdToEur) {
   const sorted = [...cards]
   sorted.sort((a, b) => {
     if (sortBy === 'price_desc' || sortBy === 'price_asc') {
-      const priceA = setSortPrice(a, pricePrimaryField)
-      const priceB = setSortPrice(b, pricePrimaryField)
+      const priceA = setSortPrice(a, pricePrimaryField, priceSource, usdToEur)
+      const priceB = setSortPrice(b, pricePrimaryField, priceSource, usdToEur)
       const priceCompare = sortBy === 'price_desc' ? priceB - priceA : priceA - priceB
       if (priceCompare !== 0) return priceCompare
       return compareNumberLike(a.number, b.number)
@@ -81,7 +66,7 @@ export default function SetDetail() {
   const { setId } = useParams()
   const goBack = useDetailBackNavigation('sets', '/sets')
   useScrollToTopOnPush()
-  const { t, pricePrimaryField, formatPrice } = useSettings()
+  const { t, pricePrimaryField, searchPriceSource, usdToEurRate, formatPrice } = useSettings()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('all')
   const [sortBy, setSortBy] = useState('number')
@@ -177,7 +162,7 @@ export default function SetDetail() {
     if (filter === 'missing' && card.owned) return false
     if (rarityFilter !== 'all' && card.rarity !== rarityFilter) return false
     return true
-  }), sortBy, pricePrimaryField)
+  }), sortBy, pricePrimaryField, searchPriceSource, usdToEurRate)
 
   return (
     <div className="space-y-4 pb-2">
@@ -325,7 +310,7 @@ export default function SetDetail() {
             key={card.id}
             card={card}
             image={resolveCardImageUrl(card)}
-            price={setSortPrice(card, pricePrimaryField) > 0 ? formatPrice(setSortPrice(card, pricePrimaryField)) : null}
+            price={setSortPrice(card, pricePrimaryField, searchPriceSource, usdToEurRate) > 0 ? formatPrice(setSortPrice(card, pricePrimaryField, searchPriceSource, usdToEurRate)) : null}
             dimWhenUnowned
             onClick={() => {
               setSelectedCardTab('add')

@@ -385,7 +385,7 @@ export default function Settings() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { user, updateCurrentUser, multiUser, modeLocked } = useAuth()
-  const { settings, updateSettings, t, pricePrimaryField, exchangeRate } = useSettings()
+  const { settings, updateSettings, t, valuationParams, exchangeRate } = useSettings()
   const supportPageUrl = settings.language === 'de'
     ? 'https://pokecollector.romerg.de/de/#support'
     : 'https://pokecollector.romerg.de/#support'
@@ -688,6 +688,15 @@ export default function Settings() {
     }
   }
 
+  const handleSearchPriceSourceChange = async (val) => {
+    try {
+      await updateSettings({ search_price_source: val })
+      toast.success(t('settings.saved'))
+    } catch {
+      toast.error(t('settings.saveFailed'))
+    }
+  }
+
   const handleTcgdexSyncLanguagesChange = async (val) => {
     try {
       await updateSettings({ tcgdex_sync_languages: normalizeTcgdexLanguageCsv(val) })
@@ -825,7 +834,8 @@ export default function Settings() {
   const currentAppLang = currentLang === 'zh' ? 'zh-cn' : currentLang
   const currentCurrency = settings.currency || 'EUR'
   const currentPriceType = settings.price_primary || 'trend'
-  const exportParams = { price_field: pricePrimaryField, currency: currentCurrency, exchange_rate: exchangeRate }
+  const currentSearchPriceSource = settings.search_price_source || 'cardmarket'
+  const exportParams = { ...valuationParams, currency: currentCurrency, exchange_rate: exchangeRate }
   const currentTcgdexSyncLanguages = normalizeTcgdexLanguageCsv(settings.tcgdex_sync_languages || 'en,de')
   const digitalSetsEnabled = settings.tcgdex_digital_sets_enabled === 'true'
   const crossLanguagePriceFallback = settings.cross_language_price_fallback !== 'false'
@@ -1143,6 +1153,24 @@ export default function Settings() {
                     { value: 'USD', label: '$ USD' },
                   ]}
                   onChange={handleCurrencyChange}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label={t('settings.priceSource')}
+                description={
+                  currentSearchPriceSource === 'pricecharting'
+                    ? t('settings.priceSourcePricechartingDesc')
+                    : t('settings.priceSourceDesc')
+                }
+              >
+                <SelectControl
+                  value={currentSearchPriceSource}
+                  options={[
+                    { value: 'cardmarket', label: t('settings.priceSourceCardmarket') },
+                    { value: 'tcgplayer', label: t('settings.priceSourceTcgplayer') },
+                    { value: 'pricecharting', label: t('settings.priceSourcePricecharting') },
+                  ]}
+                  onChange={handleSearchPriceSourceChange}
                 />
               </SettingsRow>
               <SettingsRow label={t('settings.priceType')} description={t('settings.priceTypeDesc')}>

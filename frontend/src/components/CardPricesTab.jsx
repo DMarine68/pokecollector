@@ -16,6 +16,7 @@ import {
   Info,
   ShieldCheck,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -77,12 +78,24 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
   })
 
   // 2. PriceCharting Query
-  const { data: pricechartingData, isLoading: isLoadingPricecharting } = useQuery({
+  const {
+    data: pricechartingData,
+    isFetching: isFetchingPricecharting,
+    isPending: isPendingPricecharting,
+  } = useQuery({
     queryKey: ['pricecharting', cardId],
     queryFn: () => getPriceCharting(cardId),
     enabled: !!cardId && !card?.is_custom,
     staleTime: 1000 * 60 * 30, // 30 minutes
+    placeholderData: undefined,
   })
+  const pricechartingForCard = pricechartingData?.card_id === cardId ? pricechartingData : null
+  const isLoadingPricecharting = Boolean(
+    cardId
+    && !card?.is_custom
+    && (isPendingPricecharting || isFetchingPricecharting)
+    && !pricechartingForCard
+  )
 
   if (!card) return null
 
@@ -264,7 +277,12 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
               <h3 className="text-sm font-black text-text-primary">
                 {t('prices.pricechartingTitle')}
               </h3>
-              {pricechartingData?.has_live_data ? (
+              {isLoadingPricecharting ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-text-muted">
+                  <RefreshCw size={11} className="animate-spin" />
+                  {t('prices.pricechartingLoading')}
+                </span>
+              ) : pricechartingForCard?.has_live_data ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-green/15 px-2 py-0.5 text-[10px] font-bold text-green">
                   <CheckCircle2 size={11} />
                   {t('prices.liveData')}
@@ -280,9 +298,9 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
             </p>
           </div>
 
-          {pricechartingData?.search_url && (
+          {pricechartingForCard?.search_url && (
             <a
-              href={pricechartingData.search_url}
+              href={pricechartingForCard.search_url}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-ghost inline-flex items-center gap-1.5 text-xs font-bold text-brand-red hover:text-brand-red-light"
@@ -295,14 +313,17 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
 
         {/* Grades Comparison Grid */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {(pricechartingData?.grades || [
-            { id: 'ungraded', name: t('prices.ungraded'), label: t('prices.ungradedDesc'), price: card.price_market, multiplier: 1.0 },
-            { id: 'grade_7', name: t('prices.grade7'), label: t('prices.grade7Desc'), price: card.price_market ? card.price_market * 1.05 : null, multiplier: 1.05 },
-            { id: 'grade_8', name: t('prices.grade8'), label: t('prices.grade8Desc'), price: card.price_market ? card.price_market * 1.35 : null, multiplier: 1.35 },
-            { id: 'grade_9', name: t('prices.grade9'), label: t('prices.grade9Desc'), price: card.price_market ? card.price_market * 2.8 : null, multiplier: 2.8 },
-            { id: 'grade_9_5', name: t('prices.grade95'), label: t('prices.grade95Desc'), price: card.price_market ? card.price_market * 3.8 : null, multiplier: 3.8 },
-            { id: 'psa_10', name: t('prices.psa10'), label: t('prices.psa10Desc'), price: card.price_market ? card.price_market * 8.5 : null, multiplier: 8.5, is_psa10: true },
-          ]).map(grade => {
+          {(isLoadingPricecharting
+            ? [
+              { id: 'ungraded', name: t('prices.ungraded'), label: t('prices.ungradedDesc'), loading: true },
+              { id: 'grade_7', name: t('prices.grade7'), label: t('prices.grade7Desc'), loading: true },
+              { id: 'grade_8', name: t('prices.grade8'), label: t('prices.grade8Desc'), loading: true },
+              { id: 'grade_9', name: t('prices.grade9'), label: t('prices.grade9Desc'), loading: true },
+              { id: 'grade_9_5', name: t('prices.grade95'), label: t('prices.grade95Desc'), loading: true },
+              { id: 'psa_10', name: t('prices.psa10'), label: t('prices.psa10Desc'), loading: true, is_psa10: true },
+            ]
+            : (pricechartingForCard?.grades || [])
+          ).map(grade => {
             const isPsa10 = grade.is_psa10 || grade.id === 'psa_10'
             return (
               <div
@@ -327,9 +348,14 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
                   {grade.label}
                 </p>
                 <p className="mt-2 text-sm font-black text-text-primary">
-                  {grade.price != null ? formatUsdPrice(grade.price) : '—'}
+                  {grade.loading ? (
+                    <span className="inline-flex items-center gap-1 text-text-muted">
+                      <RefreshCw size={12} className="animate-spin" />
+                      {t('prices.pricechartingLoading')}
+                    </span>
+                  ) : grade.price != null ? formatUsdPrice(grade.price) : '—'}
                 </p>
-                {grade.id === 'ungraded' ? (
+                {grade.loading ? null : grade.id === 'ungraded' ? (
                   <span className="mt-1 inline-block text-[10px] font-bold text-text-muted">
                     {t('prices.rawBaseline')}
                   </span>
@@ -342,6 +368,11 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
             )
           })}
         </div>
+        {!isLoadingPricecharting && Number.isFinite(pricechartingForCard?.sales_volume_year) ? (
+          <p className="text-[11px] font-semibold text-text-secondary">
+            {t('prices.salesVolumeYear', { count: pricechartingForCard.sales_volume_year })}
+          </p>
+        ) : null}
       </div>
 
       {/* ── 4. CARDMARKET PRICES BREAKDOWN ── */}

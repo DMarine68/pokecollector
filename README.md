@@ -179,7 +179,7 @@ FRONTEND_PORT=3000
 ### 2. Start
 
 ```bash
-mkdir -p data/pokedex-images backups
+mkdir -p data/pokedex-images data/card-images backups
 docker compose up -d
 ```
 
@@ -299,6 +299,7 @@ If you are already locked out of multi-user mode, set `USER_MODE=single` in the 
 | `GEMINI_ALLOWED_MODELS` | Comma-separated administrator allowlist shown as a guarded dropdown. | `GEMINI_MODEL` only |
 | `SCAN_TRACE_DIR` | Enables consent-controlled scanner diagnostics when set to a writable container path. With the standard compose volume, use `/app/data/scan-traces`. Each user must still opt in separately in Settings. | *(empty / disabled)* |
 | `SCAN_TRACE_STORAGE_DIR` | Stable cleanup path for previously stored scanner diagnostics. Standard Docker Compose sets this to `/app/data/scan-traces`; custom deployments should keep it pointed at the storage location even when `SCAN_TRACE_DIR` is unset. | `/app/data/scan-traces` with Docker Compose |
+| `CARD_IMAGE_CACHE_DIR` | Persistent folder for proxied card, set, and product images. Standard Docker Compose bind-mounts `./data/card-images`. Images are fetched once from TCGdex (or a custom URL) and served from disk after that. | `/app/data/card-images` with Docker Compose |
 | `TELEGRAM_BOT_TOKEN` | Initial Telegram bot token for the admin user | *(empty)* |
 | `TELEGRAM_CHAT_ID` | Initial Telegram chat ID for the admin user | *(empty)* |
 | `TCGDEX_SYNC_LANGUAGES` | Initial admin default for TCGdex set/card sync languages on first launch only. After bootstrap, the DB setting in Settings is authoritative. Comma-separated TCGdex language codes, or `all` to enable every supported TCGdex language. Empty or invalid values safely fall back to `en,de`. Extra languages increase sync time, API calls, and database size. | `en,de` |
