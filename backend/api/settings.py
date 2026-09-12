@@ -26,6 +26,10 @@ from services.tcgdex_languages import (
     supported_tcgdex_language_payload,
     validate_tcgdex_sync_languages,
 )
+from services.search_price_source import (
+    SEARCH_PRICE_SOURCE_KEY,
+    parse_search_price_source,
+)
 from services.scan_trace import (
     SCAN_DIAGNOSTICS_SETTING_KEY,
     delete_user_traces,
@@ -73,7 +77,7 @@ logger = logging.getLogger(__name__)
 PHOTO_PREFERENCE_SETTING_KEY = "prefer_own_card_photos"
 
 PER_USER_KEYS = {
-    "language", "currency", "price_primary", "price_display",
+    "language", "currency", "price_primary", "search_price_source", "price_display",
     "set_overview_filters", "hidden_set_ids",
     "telegram_bot_token", "telegram_chat_id", "telegram_enabled",
     "price_alerts_enabled", "price_alert_threshold",
@@ -165,6 +169,7 @@ DEFAULT_SETTINGS = {
     "language": "en",
     "currency": "EUR",
     "price_primary": "trend",
+    SEARCH_PRICE_SOURCE_KEY: "cardmarket",
     "portfolio_display_mode": "portfolio_value",
     "price_display": '["trend", "avg", "avg1", "avg7", "avg30", "low"]',
     "set_overview_filters": "{}",
@@ -202,6 +207,11 @@ def _coerce_setting_value(key: str, value) -> str:
         if normalized not in {"portfolio_value", "capital_invested"}:
             raise HTTPException(status_code=422, detail="portfolio_display_mode is invalid")
         return normalized
+    if key == SEARCH_PRICE_SOURCE_KEY:
+        try:
+            return parse_search_price_source(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     return str(value)
 
 

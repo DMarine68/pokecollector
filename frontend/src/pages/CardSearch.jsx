@@ -10,6 +10,8 @@ import Sheet from '../components/ui/Sheet'
 import CardScanner from '../components/UnifiedCardScanner'
 import { getDefaultVariantOrNull } from '../utils/cardVariants'
 import { cardNumberMatches } from '../utils/cardNumbers'
+import { formatSearchDisplayPrice } from '../utils/prices'
+import { resolveCardImageUrl } from '../utils/imageUrl'
 import { normalizeSearchText, textIncludes } from '../utils/textSearch'
 import { useVisibleTcgdexLanguages } from '../hooks/useVisibleTcgdexLanguages'
 import TcgdexLanguageSelect from '../components/TcgdexLanguageSelect'
@@ -131,7 +133,7 @@ function FilterForm({ filters, setFilter, allSeries, setsForSeries, toggleSortOr
 }
 
 export default function CardSearch() {
-  const { t, settings, formatPrice } = useSettings()
+  const { t, settings, formatPrice, formatUsdPrice, pricePrimaryField, searchPriceSource } = useSettings()
   const visibleLanguages = useVisibleTcgdexLanguages()
   const queryClient = useQueryClient()
   const location = useLocation()
@@ -249,7 +251,7 @@ export default function CardSearch() {
   const hasQuery = filters.name || filters.category || filters.type || filters.subtype || filters.rarity || filters.set_id || filters.artist || filters.hp_min || filters.hp_max || filters.series
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['card-search', queryParams],
+    queryKey: ['card-search', queryParams, searchPriceSource],
     queryFn: () => searchCards(queryParams).then(r => r.data),
     enabled: !!hasQuery,
     placeholderData: (prev) => prev,
@@ -758,15 +760,21 @@ export default function CardSearch() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {data.data?.map((card) => {
-                const imgSrc = card.images?.small || card.images_small || (card.image ? `${card.image}/low.webp` : null)
+                const imgSrc = resolveCardImageUrl(card)
                 const isSelected = selectedItems.has(card.id)
-                const cardPrice = card.price_market ?? card.price_trend ?? null
+                const cardPrice = formatSearchDisplayPrice(
+                  card,
+                  searchPriceSource,
+                  pricePrimaryField,
+                  formatPrice,
+                  formatUsdPrice,
+                )
                 return (
                   <CardDisplay
                     key={card.id}
                     card={card}
                     image={imgSrc}
-                    price={cardPrice > 0 ? formatPrice(cardPrice) : null}
+                    price={cardPrice}
                     languageLabel={card._lang && langFilter === 'all' ? tcgdexLanguageLabel(card._lang) : null}
                     selected={selectMode && isSelected}
                     onSelect={selectMode ? () => toggleSelected(card) : undefined}

@@ -13,6 +13,7 @@ from models import Card, CollectionItem, ProductCard, ProductLedgerEntry, Produc
 from schemas import TradeCreate, TradeResponse, TradeUpdate, TradeValuationRequest
 from services import pokemon_api
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import normalize_search_price_source
 from services.card_visibility import visible_any_card_filter
 from services.binder_allocations import (
     collection_binder_allocation_counts,
@@ -51,11 +52,11 @@ def _card_snapshot(card: Card | None) -> dict:
     }
 
 
-def _snapshot_price(card: Card | None, variant: str | None, override, price_field: str) -> float:
+def _snapshot_price(card: Card | None, variant: str | None, override, price_field: str, price_source: str = "cardmarket") -> float:
     _validate_money(override, "value_per_card")
     if override is not None:
         return round(float(override), 2)
-    return round(float(effective_market_price(card, variant, price_field) or 0), 2)
+    return round(float(effective_market_price(card, variant, price_field, price_source) or 0), 2)
 
 
 def _cash_amount(value) -> float:
@@ -90,7 +91,7 @@ def _resolve_incoming_card(db: Session, card_id: str, lang: str, user_id: int) -
     return ensure_card_exists(db, effective_card_id, lang=effective_lang, user_id=user_id)
 
 
-def _prepare_incoming_card(db: Session, incoming, price_field: str, user_id: int) -> dict:
+def _prepare_incoming_card(db: Session, incoming, price_field: str, user_id: int, price_source: str = "cardmarket") -> dict:
     if not positive_quantity(incoming.quantity, TRADE_QUANTITY_MAX):
         raise HTTPException(status_code=422, detail="quantity must be between 1 and 999")
     condition = incoming.condition or "NM"
@@ -104,7 +105,7 @@ def _prepare_incoming_card(db: Session, incoming, price_field: str, user_id: int
     card = _resolve_incoming_card(db, incoming.card_id, lang, user_id)
     item_lang = card.lang or lang
     value_override = getattr(incoming, "value_per_card", None)
-    value_per_card = _snapshot_price(card, variant, value_override, price_field)
+    value_per_card = _snapshot_price(card, variant, value_override, price_field, price_source)
     purchase_price = purchase_price_override
     if not hasattr(incoming, "purchase_price"):
         purchase_price = value_per_card
@@ -594,8 +595,10 @@ def value_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend"),
+    price_source: str = Query(default="cardmarket"),
 ):
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
 
     def value_items(items):
         total = 0.0
@@ -609,7 +612,7 @@ def value_trade(
             ).first()
             if not card:
                 raise HTTPException(status_code=404, detail="Card not found")
-            value_per_card = _snapshot_price(card, item.variant, None, price_field)
+            value_per_card = _snapshot_price(card, item.variant, None, price_field, price_source)
             value_total = round(value_per_card * quantity, 2)
             total += value_total
             valued.append({
@@ -639,8 +642,10 @@ def create_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend"),
+    price_source: str = Query(default="cardmarket"),
 ):
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     outgoing_cash = _cash_amount(trade.outgoing_cash)
     incoming_cash = _cash_amount(trade.incoming_cash)
     if not trade.outgoing and not trade.incoming and outgoing_cash <= 0 and incoming_cash <= 0:
@@ -649,7 +654,7 @@ def create_trade(
     # Cache/resolve remote cards before inventory locks are acquired because
     # ensure_card_exists may commit its standalone card-cache write.
     prepared_incoming = [
-        _prepare_incoming_card(db, incoming, price_field, current_user.id)
+        _prepare_incoming_card(db, incoming, price_field, current_user.id, price_source)
         for incoming in trade.incoming
     ]
     db.query(User).filter(User.id == current_user.id).with_for_update(of=User).one()
@@ -711,7 +716,7 @@ def create_trade(
                     detail=f"This trade would leave fewer copies than the {allocated_quantity} assigned to binders. Reduce binder quantities first.",
                 )
 
-            value_per_card = _snapshot_price(collection_item.card, collection_item.variant, outgoing.value_per_card, price_field)
+            value_per_card = _snapshot_price(collection_item.card, collection_item.variant, outgoing.value_per_card, price_field, price_source)
             value_total = round(value_per_card * outgoing.quantity, 2)
             outgoing_total += value_total
 
@@ -834,9 +839,11 @@ def update_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     price_field: str = Query(default="price_trend"),
+    price_source: str = Query(default="cardmarket"),
 ):
     """Atomically reconcile an edited trade with inventory and product history."""
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     outgoing_cash = _cash_amount(update.outgoing_cash)
     incoming_cash = _cash_amount(update.incoming_cash)
     if not update.outgoing and not update.incoming and outgoing_cash <= 0 and incoming_cash <= 0:
@@ -869,7 +876,7 @@ def update_trade(
             incoming_existing_ids.add(item.trade_item_id)
         else:
             prepared_new_incoming[index] = _prepare_incoming_card(
-                db, item, price_field, current_user.id
+                db, item, price_field, current_user.id, price_source
             )
 
     try:
@@ -1059,7 +1066,7 @@ def update_trade(
                     status_code=409,
                     detail=f"Only {max(available, 0)} unallocated copies of {collection_item.card.name if collection_item.card else collection_item.card_id} are available.",
                 )
-            value_per_card = _snapshot_price(collection_item.card, collection_item.variant, None, price_field)
+            value_per_card = _snapshot_price(collection_item.card, collection_item.variant, None, price_field, price_source)
             trade_item = TradeItem(
                 trade_id=db_trade.id,
                 user_id=current_user.id,

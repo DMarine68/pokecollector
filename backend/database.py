@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = {
     "language": "en",
     "price_display": '["trend", "avg", "avg1", "avg7", "avg30", "low"]',
     "price_primary": "trend",
+    "search_price_source": "cardmarket",
     "portfolio_display_mode": "portfolio_value",
     "multi_user_mode": "false",
     "tcgdex_sync_languages": "en,de",
@@ -548,6 +549,9 @@ def _run_migrations(conn):
         "ALTER TABLE cards ADD COLUMN IF NOT EXISTS custom_source_card_id VARCHAR",
         "CREATE INDEX IF NOT EXISTS ix_cards_custom_owner_id ON cards(custom_owner_id)",
         "CREATE INDEX IF NOT EXISTS ix_cards_custom_source_card_id ON cards(custom_source_card_id)",
+        # v60: Cached PriceCharting ungraded USD price for search tiles.
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS price_pc_ungraded FLOAT",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS price_pc_synced_at TIMESTAMP",
         """DO $$
         BEGIN
             IF NOT EXISTS (

@@ -739,7 +739,7 @@ function ProductCardsModal({
 }
 
 export default function Products() {
-  const { t, formatPrice, pricePrimaryField } = useSettings()
+  const { t, formatPrice, valuationParams } = useSettings()
   const confirmDialog = useConfirmDialog()
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -755,13 +755,13 @@ export default function Products() {
   const [showFilters, setShowFilters] = useState(false)
   const queryClient = useQueryClient()
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ['products', pricePrimaryField],
-    queryFn: () => getProducts({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['products', valuationParams],
+    queryFn: () => getProducts(valuationParams).then(r => r.data),
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['products-summary', pricePrimaryField],
-    queryFn: () => getProductsSummary({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['products-summary', valuationParams],
+    queryFn: () => getProductsSummary(valuationParams).then(r => r.data),
   })
 
   const { data: collectionItems = [] } = useQuery({

@@ -219,7 +219,7 @@ function BinderCsvImportModal({ t, isWishlist, onClose, onChooseFile, onDownload
 export default function BinderDetail() {
   const { binderId } = useParams()
   const navigate = useNavigate()
-  const { t, formatPrice, pricePrimaryField, settings } = useSettings()
+  const { t, formatPrice, valuationParams, settings } = useSettings()
   const queryClient = useQueryClient()
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -266,8 +266,8 @@ export default function BinderDetail() {
   const selectedCardCloseRef = useRef(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['binder-cards', binderId, pricePrimaryField],
-    queryFn: () => getBinderCards(parseInt(binderId), { price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['binder-cards', binderId, valuationParams],
+    queryFn: () => getBinderCards(parseInt(binderId), valuationParams).then(r => r.data),
   })
 
   const binder = data?.binder
@@ -583,8 +583,8 @@ export default function BinderDetail() {
   })
 
   const { data: equivalentPrintsData, isLoading: equivalentPrintsLoading } = useQuery({
-    queryKey: ['binder-entry-equivalents', binderId, binderType, selectedCard?.binder_card_id, pricePrimaryField],
-    queryFn: () => getBinderEntryEquivalentPrints(parseInt(binderId), selectedCard.binder_card_id, { price_field: pricePrimaryField }),
+    queryKey: ['binder-entry-equivalents', binderId, binderType, selectedCard?.binder_card_id, valuationParams],
+    queryFn: () => getBinderEntryEquivalentPrints(parseInt(binderId), selectedCard.binder_card_id, valuationParams),
     enabled: (isWishlist || isCollection) && !!selectedCard?.binder_card_id,
   })
 
@@ -601,8 +601,8 @@ export default function BinderDetail() {
   })
 
   const { data: printOptimizationData, isLoading: printOptimizationLoading, isError: printOptimizationError, error: printOptimizationErrorData } = useQuery({
-    queryKey: ['binder-print-optimization', binderId, pricePrimaryField],
-    queryFn: () => getBinderPrintOptimization(parseInt(binderId), { price_field: pricePrimaryField }),
+    queryKey: ['binder-print-optimization', binderId, valuationParams],
+    queryFn: () => getBinderPrintOptimization(parseInt(binderId), valuationParams),
     enabled: (isWishlist || isCollection) && showPrintOptimizer,
     retry: false,
   })
@@ -613,7 +613,7 @@ export default function BinderDetail() {
   }, [showPrintOptimizer, printOptimizationData])
 
   const applyPrintOptimizationMutation = useMutation({
-    mutationFn: (selectedIds) => applyBinderPrintOptimization(parseInt(binderId), selectedIds, { price_field: pricePrimaryField }),
+    mutationFn: (selectedIds) => applyBinderPrintOptimization(parseInt(binderId), selectedIds, valuationParams),
     onSuccess: (result) => {
       toast.success(`${t('binderTypes.optimizePrintsApplied')} ✓ (${result.applied} ${t('binderTypes.updated')}, ${result.skipped} ${t('binderTypes.skipped')}, ${formatPrice(result.total_savings || 0)})`)
       queryClient.invalidateQueries({ queryKey: ['binder-cards', binderId] })

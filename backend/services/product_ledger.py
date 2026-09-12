@@ -49,13 +49,18 @@ def sale_total_is_valid(value) -> bool:
     return finite_non_negative(value)
 
 
-def entry_live_value(entry, price_field: str | None = "price_trend") -> float:
+def entry_live_value(entry, price_field: str | None = "price_trend", price_source: str | None = "cardmarket") -> float:
     """Calculate live value for the active copies on one product-card ledger row."""
     active_quantity = max(int(getattr(entry, "active_quantity", 0) or 0), 0)
     if active_quantity <= 0:
         return 0
     card = getattr(entry, "card", None)
-    price = effective_market_price(card, getattr(entry, "variant", None), normalize_price_field(price_field))
+    price = effective_market_price(
+        card,
+        getattr(entry, "variant", None),
+        normalize_price_field(price_field),
+        price_source,
+    )
     return round(price * active_quantity, 2)
 
 
@@ -72,7 +77,12 @@ def entry_realized_value(entry) -> float:
     return round(total, 2)
 
 
-def ledger_totals(entries: Iterable, price_field: str | None = "price_trend", flat_entries: Iterable | None = None) -> ProductLedgerTotals:
+def ledger_totals(
+    entries: Iterable,
+    price_field: str | None = "price_trend",
+    flat_entries: Iterable | None = None,
+    price_source: str | None = "cardmarket",
+) -> ProductLedgerTotals:
     """Calculate aggregate dynamic product values from active and realized ledger rows."""
     live_cards_value = 0.0
     realized_gains = 0.0
@@ -87,7 +97,7 @@ def ledger_totals(entries: Iterable, price_field: str | None = "price_trend", fl
         linked_cards_count += initial_quantity
         active_cards_count += active_quantity
         sold_cards_count += sold_quantity
-        live_cards_value += entry_live_value(entry, price_field)
+        live_cards_value += entry_live_value(entry, price_field, price_source)
         realized_gains += entry_realized_value(entry)
 
     for ledger_entry in flat_entries or []:
@@ -132,7 +142,13 @@ def product_lifecycle_status(product, has_activity: bool = False) -> str:
     return "sealed"
 
 
-def product_effective_value(product, entries: Iterable, price_field: str | None = "price_trend", flat_entries: Iterable | None = None):
+def product_effective_value(
+    product,
+    entries: Iterable,
+    price_field: str | None = "price_trend",
+    flat_entries: Iterable | None = None,
+    price_source: str | None = "cardmarket",
+):
     """Return the value used for product P&L without breaking old manual products.
 
     Products with any linked-card ledger rows are dynamically valued as active
@@ -143,7 +159,7 @@ def product_effective_value(product, entries: Iterable, price_field: str | None 
     """
     entry_list = list(entries)
     flat_entry_list = list(flat_entries or [])
-    totals = ledger_totals(entry_list, price_field, flat_entry_list)
+    totals = ledger_totals(entry_list, price_field, flat_entry_list, price_source)
     lifecycle_status = product_lifecycle_status(product, bool(entry_list or flat_entry_list))
     if entry_list or flat_entry_list:
         return totals.dynamic_value, "linked_cards", totals

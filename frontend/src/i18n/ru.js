@@ -624,7 +624,13 @@ const ru = {
     currency: 'Валюта',
     currencyDesc: 'Отображение цен',
     priceType: 'Тип цены',
-    priceTypeDesc: 'Какая цена Cardmarket отображается',
+    priceTypeDesc: 'Какая цена Cardmarket используется, когда источником цены выбран Cardmarket',
+    priceSource: 'Источник цены',
+    priceSourceDesc: 'Какой рынок используется для поиска, коллекции и портфеля',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (без грейда)',
+    priceSourcePricechartingDesc: 'Неоценённая цена PriceCharting. Коллекция и портфель переводят её в вашу валюту. Для загрузки отсутствующих цен нужен API-токен в синхронизации данных.',
     tcgdexSyncLanguages: 'Языки синхронизации TCGdex',
     tcgdexSyncLanguagesDesc: 'Выберите, какие языки должна получать полная синхронизация наборов/карт TCGdex. Дополнительные языки увеличивают время синхронизации, число API-запросов и размер базы данных. Синхронизация цен не затрагивается.',
     tcgdexSyncLanguagesSelected: 'выбрано',
@@ -807,6 +813,8 @@ const ru = {
     priceInterval: 'Интервал автоматической малой синхронизации',
     syncPricesOnlyDesc: 'Обновить цены для всех отслеживаемых карт в коллекции, списке желаний и альбомах без лимита или задержки малой синхронизации.',
     autoSmallSyncDesc: 'Автоматическая фоновая синхронизация выполняет малую синхронизацию цен.',
+    pricechartingToken: 'API-токен PriceCharting',
+    pricechartingTokenDesc: 'Legendary-токен с PriceCharting.com. Можно также задать PRICECHARTING_API_TOKEN в .env. Не больше 1 запроса в секунду. Если источник цен — PriceCharting, а валюта USD, следующая синхронизация цен обновит неоценённые цены в фоне.',
     // Sync interval options (days)
     day1: '1 день',
     days2: '2 дня',
@@ -849,6 +857,8 @@ const ru = {
     history: 'История цен',
     sinceTracking: 'с начала отслеживания',
     cardmarketTitle: 'Цены Cardmarket',
+    pricechartingLoading: 'Загрузка PriceCharting…',
+    salesVolumeYear: '{count} продаж за последний год',
   },
 
   // Set Detail

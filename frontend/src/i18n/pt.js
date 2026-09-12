@@ -624,7 +624,13 @@ const pt = {
     currency: 'Moeda',
     currencyDesc: 'Apresentação de preços',
     priceType: 'Tipo de preço',
-    priceTypeDesc: 'Que preço Cardmarket é apresentado',
+    priceTypeDesc: 'Que métrica Cardmarket é usada quando a fonte de preço é Cardmarket',
+    priceSource: 'Fonte de preço',
+    priceSourceDesc: 'Que mercado é usado para pesquisa, coleção e portfólio',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (não classificado)',
+    priceSourcePricechartingDesc: 'Preço PriceCharting não classificado. A coleção e o portfólio convertem-no para a tua moeda. É necessário um token da API em Sincronização de dados para carregar preços em falta.',
     tcgdexSyncLanguages: 'Idiomas de sincronização TCGdex',
     tcgdexSyncLanguagesDesc: 'Escolha que idiomas a sincronização completa de sets/cartas TCGdex deve obter. Idiomas extra aumentam o tempo de sincronização, chamadas à API e tamanho da base de dados. A sincronização de preços não é afetada.',
     tcgdexSyncLanguagesSelected: 'selecionados',
@@ -807,6 +813,8 @@ const pt = {
     priceInterval: 'Intervalo da pequena sincronização automática',
     syncPricesOnlyDesc: 'Atualizar preços de todas as cartas acompanhadas na coleção, lista de desejos e fichários sem o limite ou cooldown da pequena sincronização.',
     autoSmallSyncDesc: 'A sincronização automática em segundo plano executa a pequena sincronização de preços.',
+    pricechartingToken: 'Token da API PriceCharting',
+    pricechartingTokenDesc: 'Token Legendary de PriceCharting.com. Também podes definir PRICECHARTING_API_TOKEN no .env. Máximo 1 pedido por segundo. Se a fonte de preços for PriceCharting e a moeda USD, a próxima sincronização de preços atualiza os preços não classificados em segundo plano.',
     // Sync interval options (days)
     day1: '1 dia',
     days2: '2 dias',
@@ -849,6 +857,8 @@ const pt = {
     history: 'Histórico de preços',
     sinceTracking: 'desde o acompanhamento',
     cardmarketTitle: 'Preços Cardmarket',
+    pricechartingLoading: 'A carregar PriceCharting…',
+    salesVolumeYear: '{count} vendidas no último ano',
   },
 
   // Set Detail

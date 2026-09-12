@@ -624,7 +624,13 @@ const zhTw = {
     currency: '貨幣',
     currencyDesc: '價格顯示',
     priceType: '價格類型',
-    priceTypeDesc: '顯示哪種 Cardmarket 價格',
+    priceTypeDesc: '當價格來源為 Cardmarket 時使用的 Cardmarket 指標',
+    priceSource: '價格來源',
+    priceSourceDesc: '搜尋、收藏與投資組合使用哪個市場的價格',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting（未評級）',
+    priceSourcePricechartingDesc: 'PriceCharting 未評級價格。收藏與投資組合會換算為顯示貨幣。需在資料同步中設定 API Token 才能載入尚未快取的價格。',
     tcgdexSyncLanguages: 'TCGdex 同步語言',
     tcgdexSyncLanguagesDesc: '選擇完整 TCGdex 系列/卡牌同步要抓取的語言。額外語言會增加同步時間、API 呼叫和資料庫大小。價格同步不受影響。',
     tcgdexSyncLanguagesSelected: '已選擇',
@@ -807,6 +813,8 @@ const zhTw = {
     priceInterval: '自動小同步間隔',
     syncPricesOnlyDesc: '重新整理收藏、願望清單和卡冊中所有已追蹤卡牌的價格，不受小同步上限或冷卻時間影響。',
     autoSmallSyncDesc: '背景自動同步會執行小型價格同步。',
+    pricechartingToken: 'PriceCharting API Token',
+    pricechartingTokenDesc: '來自 PriceCharting.com 的 Legendary API Token。也可在 .env 設定 PRICECHARTING_API_TOKEN。每秒最多 1 次請求。當價格來源為 PriceCharting 且貨幣為 USD 時，下一次價格同步會在背景更新未評級價格。',
     // Sync interval options (days)
     day1: '1 天',
     days2: '2 天',
@@ -849,6 +857,8 @@ const zhTw = {
     history: '價格歷史',
     sinceTracking: '自追蹤以來',
     cardmarketTitle: 'Cardmarket 價格',
+    pricechartingLoading: '正在載入 PriceCharting…',
+    salesVolumeYear: '過去一年售出 {count} 張',
   },
 
   // Set Detail

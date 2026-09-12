@@ -622,7 +622,13 @@ const fr = {
     currency: 'Devise',
     currencyDesc: 'Affichage des prix',
     priceType: 'Type de prix',
-    priceTypeDesc: 'Quel prix Cardmarket est affiché',
+    priceTypeDesc: 'Quelle métrique Cardmarket est utilisée lorsque la source de prix est Cardmarket',
+    priceSource: 'Source de prix',
+    priceSourceDesc: 'Quel marché est utilisé pour la recherche, la collection et le portefeuille',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (non gradé)',
+    priceSourcePricechartingDesc: 'Prix PriceCharting non gradé. La collection et le portefeuille le convertissent dans votre devise. Un jeton API dans Synchronisation des données est requis pour charger les prix manquants.',
     tcgdexSyncLanguages: 'Langues de synchronisation TCGdex',
     tcgdexSyncLanguagesDesc: 'Choisissez quelles langues la synchronisation complète TCGdex doit récupérer. Les langues supplémentaires augmentent le temps de sync, les appels API et la taille de la base. La synchronisation des prix n\'est pas affectée.',
     tcgdexSyncLanguagesSelected: 'sélectionnées',
@@ -805,6 +811,8 @@ const fr = {
     priceInterval: 'Intervalle de petite synchro automatique',
     syncPricesOnlyDesc: 'Actualise les prix de toutes les cartes suivies dans la collection, la liste de souhaits et les classeurs, sans limite ni délai de la petite synchro.',
     autoSmallSyncDesc: 'La synchronisation automatique en arrière-plan lance la petite synchronisation des prix.',
+    pricechartingToken: 'Jeton API PriceCharting',
+    pricechartingTokenDesc: 'Jeton Legendary de PriceCharting.com. Vous pouvez aussi définir PRICECHARTING_API_TOKEN dans .env. Maximum 1 requête par seconde. Si la source de prix est PriceCharting et la devise USD, la prochaine synchro des prix met à jour les prix non gradés en arrière-plan.',
     // Sync interval options (days)
     day1: '1 jour',
     days2: '2 jours',
@@ -847,6 +855,8 @@ const fr = {
     history: 'Historique des prix',
     sinceTracking: 'depuis le suivi',
     cardmarketTitle: 'Prix Cardmarket',
+    pricechartingLoading: 'Chargement de PriceCharting…',
+    salesVolumeYear: '{count} vendues sur la dernière année',
   },
 
   // Set Detail

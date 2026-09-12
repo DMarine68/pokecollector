@@ -39,21 +39,20 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Dashboard() {
-  const { t, formatPrice, settings, pricePrimaryField } = useSettings()
+  const { t, formatPrice, settings, valuationParams } = useSettings()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const priceField = pricePrimaryField
   const [chartPeriod, setChartPeriod] = useState('1M')
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', priceField],
-    queryFn: () => getDashboard({ price_field: priceField }).then(r => r.data),
+    queryKey: ['dashboard', valuationParams],
+    queryFn: () => getDashboard(valuationParams).then(r => r.data),
     refetchInterval: 60000,
   })
 
   const { data: investmentData = [] } = useQuery({
-    queryKey: ['investment-tracker', chartPeriod, priceField],
-    queryFn: () => getInvestmentTracker({ period: portfolioApiPeriod(chartPeriod), price_field: priceField }).then(r => r.data),
+    queryKey: ['investment-tracker', chartPeriod, valuationParams],
+    queryFn: () => getInvestmentTracker({ period: portfolioApiPeriod(chartPeriod), ...valuationParams }).then(r => r.data),
     refetchInterval: 120000,
   })
 

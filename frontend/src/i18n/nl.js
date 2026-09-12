@@ -622,7 +622,13 @@ const nl = {
     currency: 'Valuta',
     currencyDesc: 'Prijsweergave',
     priceType: 'Prijstype',
-    priceTypeDesc: 'Welke Cardmarket prijs wordt weergegeven',
+    priceTypeDesc: 'Welke Cardmarket-waarde wordt gebruikt als de prijsbron Cardmarket is',
+    priceSource: 'Prijsbron',
+    priceSourceDesc: 'Welke marktprijs voor zoeken, collectie en portfolio wordt gebruikt',
+    priceSourceCardmarket: 'Cardmarket (TCGdex)',
+    priceSourceTcgplayer: 'TCGPlayer (TCGdex)',
+    priceSourcePricecharting: 'PriceCharting (ungraded)',
+    priceSourcePricechartingDesc: 'Ongeradede PriceCharting-prijs. Collectie en portfolio rekenen hem om naar je valuta. Een API-token onder Datasynchronisatie is nodig om ontbrekende prijzen te laden.',
     tcgdexSyncLanguages: 'TCGdex Sync Talen',
     tcgdexSyncLanguagesDesc: 'Kies welke talen bij de volledige TCGdex set/kaart sync opgehaald moeten worden. Extra talen verhogen synctijd, API-aanroepen en databasegrootte. Prijssync blijft ongewijzigd.',
     tcgdexSyncLanguagesSelected: 'geselecteerd',
@@ -805,6 +811,8 @@ const nl = {
     priceInterval: 'Interval voor Automatische Kleine Sync',
     syncPricesOnlyDesc: 'Vernieuwt prijzen voor alle gevolgde kaarten in collectie, wishlist en binders zonder limiet of cooldown van de kleine sync.',
     autoSmallSyncDesc: 'De automatische achtergrondsync voert de kleine prijssync uit.',
+    pricechartingToken: 'PriceCharting API-token',
+    pricechartingTokenDesc: 'Legendary-token van PriceCharting.com. Je kunt ook PRICECHARTING_API_TOKEN in .env zetten. Maximaal 1 verzoek per seconde. Als de prijsbron PriceCharting is en de valuta USD, ververst de volgende prijssync ungraded prijzen op de achtergrond.',
     // Sync interval options (days)
     day1: '1 dag',
     days2: '2 dagen',
@@ -847,6 +855,8 @@ const nl = {
     history: 'Prijsgeschiedenis',
     sinceTracking: 'sinds start tracking',
     cardmarketTitle: 'Cardmarket Prijzen',
+    pricechartingLoading: 'PriceCharting laden…',
+    salesVolumeYear: '{count} verkocht in het afgelopen jaar',
   },
 
   // Set Detail

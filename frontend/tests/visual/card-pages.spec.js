@@ -209,7 +209,9 @@ test('trade history opens a prefilled edit draft and submits immutable values', 
   await expect(page.getByRole('button', { name: 'Review trade' })).toBeHidden()
 
   const updateRequest = page.waitForRequest(request => (
-    request.method() === 'PUT' && request.url().endsWith('/api/trades/7?price_field=price_trend')
+    request.method() === 'PUT'
+    && request.url().includes('/api/trades/7?')
+    && request.url().includes('price_field=price_trend')
   ))
   await page.locator('#trade-finalize').getByRole('button', { name: 'Save' }).click()
   const request = await updateRequest

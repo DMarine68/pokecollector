@@ -110,6 +110,9 @@ class Card(Base):
     price_tcg_holo_low = Column(Float)
     price_tcg_holo_mid = Column(Float)
     price_tcg_holo_market = Column(Float)
+    # PriceCharting USD ungraded (loose) price, cached from live PriceCharting fetches
+    price_pc_ungraded = Column(Float)
+    price_pc_synced_at = Column(DateTime, nullable=True)
     price_source_lang = Column(String, nullable=True)  # Set when prices are copied from another TCGdex language
     last_price_sync_attempt_at = Column(DateTime, nullable=True)
     last_price_sync_success_at = Column(DateTime, nullable=True)

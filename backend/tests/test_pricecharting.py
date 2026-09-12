@@ -1,11 +1,17 @@
+import datetime
 import unittest
 from unittest.mock import MagicMock, patch
 
 from services.pricecharting import (
-    clean_card_number,
+    _payload_from_pricecharting_product,
+    _pick_pricecharting_product,
+    _product_page_url,
     build_pricecharting_urls,
+    clean_card_number,
+    enrich_pricecharting_ungraded,
     estimate_graded_prices,
     get_card_pricecharting_data,
+    persist_live_ungraded_price,
 )
 
 
@@ -71,6 +77,95 @@ class TestPriceCharting(unittest.TestCase):
         self.assertTrue(psa10["is_psa10"])
         self.assertGreater(psa10["price"], 15.0)
         self.assertEqual(psa10["multiplier"], 8.5)
+
+    def test_payload_from_pricecharting_product_converts_cents(self):
+        payload = _payload_from_pricecharting_product({
+            "loose-price": 740,
+            "manual-only-price": 8500,
+            "sales-volume": 12,
+        })
+        self.assertEqual(payload["ungraded"], 7.4)
+        self.assertEqual(payload["psa_10"], 85.0)
+        self.assertEqual(payload["sales_volume_year"], 12)
+        self.assertTrue(payload["has_live_data"])
+        self.assertIsNone(_payload_from_pricecharting_product({"loose-price": 0}))
+
+    def test_persist_live_ungraded_price_ignores_estimates(self):
+        db = MagicMock()
+        card = MagicMock()
+        self.assertFalse(persist_live_ungraded_price(db, card, None, commit=False))
+        self.assertTrue(persist_live_ungraded_price(db, card, 7.4, commit=True))
+        self.assertEqual(card.price_pc_ungraded, 7.4)
+        self.assertIsNotNone(card.price_pc_synced_at)
+        db.commit.assert_called_once()
+
+    def test_enrich_pricecharting_ungraded_persists_live_api_prices(self):
+        db = MagicMock()
+        current_user = MagicMock()
+        current_user.id = 1
+        card = MagicMock()
+        card.id = "sv1-1_en"
+        card.name = "Pikachu"
+        card.number = "25"
+        card.is_custom = False
+        card.price_pc_ungraded = None
+        card.price_pc_synced_at = None
+
+        live = {
+            "source": "pricecharting_api",
+            "has_live_data": True,
+            "ungraded": 6.5,
+        }
+        with patch("services.pricecharting.resolve_pricecharting_api_token", return_value="token"), \
+             patch("services.pricecharting.fetch_pricecharting_api", return_value=live):
+            enrich_pricecharting_ungraded(db, current_user, [card], max_fetches=1)
+
+        self.assertEqual(card.price_pc_ungraded, 6.5)
+        db.commit.assert_called_once()
+
+    def test_enrich_pricecharting_ungraded_skips_fresh_cache(self):
+        db = MagicMock()
+        current_user = MagicMock()
+        card = MagicMock()
+        card.id = "sv1-2_en"
+        card.is_custom = False
+        card.price_pc_ungraded = 11.0
+        card.price_pc_synced_at = datetime.datetime.utcnow()
+
+        with patch("services.pricecharting.resolve_pricecharting_api_token", return_value="token") as token_mock, \
+             patch("services.pricecharting.fetch_pricecharting_api") as fetch_mock:
+            enrich_pricecharting_ungraded(db, current_user, [card], max_fetches=1)
+
+        fetch_mock.assert_not_called()
+        token_mock.assert_called_once()
+        db.commit.assert_not_called()
+
+    def test_enrich_pricecharting_ungraded_skips_live_fetches_by_default(self):
+        db = MagicMock()
+        current_user = MagicMock()
+        card = MagicMock()
+        card.is_custom = False
+        card.price_pc_ungraded = None
+        card.price_pc_synced_at = None
+
+        with patch("services.pricecharting.resolve_pricecharting_api_token") as token_mock, \
+             patch("services.pricecharting.fetch_pricecharting_api") as fetch_mock:
+            enrich_pricecharting_ungraded(db, current_user, [card])
+
+        token_mock.assert_not_called()
+        fetch_mock.assert_not_called()
+
+    def test_pick_pricecharting_product_prefers_matching_number(self):
+        products = [
+            {"id": "1", "product-name": "Pikachu #001", "console-name": "Pokemon Base"},
+            {"id": "2", "product-name": "Pikachu #25", "console-name": "Pokemon Base Set"},
+        ]
+        picked = _pick_pricecharting_product(products, "Pikachu", "025/102")
+        self.assertEqual(picked["id"], "2")
+        self.assertEqual(
+            _product_page_url(picked),
+            "https://www.pricecharting.com/game/pokemon-base-set/pikachu-25",
+        )
 
 
 if __name__ == "__main__":

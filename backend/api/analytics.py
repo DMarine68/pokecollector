@@ -5,6 +5,7 @@ from api.auth import get_current_user
 from api.collection import _annotate_scan_photos
 from database import get_db
 from services.card_values import effective_market_price, normalize_price_field
+from services.search_price_source import normalize_search_price_source
 from services.card_visibility import visible_any_card_filter, visible_set_filter
 from services.analytics import sort_top_movers
 from services.portfolio_valuation import (
@@ -30,14 +31,15 @@ def _is_cash_trade_item(item: TradeItem) -> bool:
     return (item.notes or "").lower() in {"cash added to trade", "cash received in trade"}
 
 
-def _get_item_price(item, price_field="price_trend"):
+def _get_item_price(item, price_field="price_trend", price_source="cardmarket"):
     """Return the selected market price for a collection item, respecting holo variant."""
-    return effective_market_price(item.card, item.variant, price_field)
+    return effective_market_price(item.card, item.variant, price_field, price_source)
 
 
 @router.get("/duplicates")
 def get_duplicates(
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -51,6 +53,7 @@ def get_duplicates(
     ).all()
 
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     # Each row is exactly one owned CollectionItem (not an aggregate), so the
     # owner's own photo can win over the catalogue scan here the same as on
     # the collection page — needs the same has_scan_photo + nested card shape.
@@ -59,7 +62,7 @@ def get_duplicates(
     result = []
     for item in items:
         if item.card:
-            price = _get_item_price(item, price_field)
+            price = _get_item_price(item, price_field, price_source)
             result.append({
                 "id": item.id,
                 "card_id": item.card_id,
@@ -88,6 +91,7 @@ def get_duplicates(
 def get_top_movers(
     days: int = Query(7, ge=1, le=30),
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     sort_by: str = Query(
         default="percentage",
         pattern="^(percentage|absolute)$",
@@ -161,6 +165,7 @@ def get_top_movers(
 @router.get("/rarity-stats")
 def get_rarity_stats(
     price_field: str = Query(default="price_trend", description="Price field to use for value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -173,6 +178,7 @@ def get_rarity_stats(
     ).all()
 
     price_field = normalize_price_field(price_field)
+    price_source = normalize_search_price_source(price_source)
     rarity_counts = {}
     rarity_values = {}
 
@@ -181,7 +187,7 @@ def get_rarity_stats(
             rarity = item.card.rarity or "Unknown"
             rarity_counts[rarity] = rarity_counts.get(rarity, 0) + item.quantity
             rarity_values[rarity] = rarity_values.get(rarity, 0) + (
-                _get_item_price(item, price_field) * item.quantity
+                _get_item_price(item, price_field, price_source) * item.quantity
             )
 
     total = sum(rarity_counts.values())
@@ -269,10 +275,10 @@ def get_trades_summary(
     return summary
 
 
-def _take_portfolio_snapshot(db: Session, user_id: int, price_field: str = "price_trend"):
+def _take_portfolio_snapshot(db: Session, user_id: int, price_field: str = "price_trend", price_source: str = "cardmarket"):
     """Insert a new portfolio snapshot (called on every price sync)."""
     now = datetime.datetime.utcnow()
-    valuation = calculate_portfolio_valuation(db, user_id, price_field)
+    valuation = calculate_portfolio_valuation(db, user_id, price_field, price_source=price_source)
 
     snapshot = PortfolioSnapshot(
         date=now,
@@ -336,13 +342,15 @@ def _downsample(snapshots, period: str):
 def get_investment_tracker(
     period: str = Query('max'),
     price_field: str = Query(default="price_trend", description="Price field to use for current value calculation"),
+    price_source: str = Query(default="cardmarket", description="Market price source: cardmarket, tcgplayer, or pricecharting"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Get portfolio value over time with optional period filtering and downsampling."""
     # Always insert a fresh snapshot so the current state is represented
     price_field = normalize_price_field(price_field)
-    _take_portfolio_snapshot(db, current_user.id, price_field)
+    price_source = normalize_search_price_source(price_source)
+    _take_portfolio_snapshot(db, current_user.id, price_field, price_source)
 
     period = period.lower()
 

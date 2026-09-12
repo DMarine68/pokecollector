@@ -21,7 +21,7 @@ import { CARD_VARIANTS, getDefaultVariantOrNull } from '../utils/cardVariants'
 import { resolveCardImageUrl } from '../utils/imageUrl'
 import { CardIdentity } from '../components/card-system'
 import { CollectionCardIdentity } from '../components/CollectionCardImage'
-import { getEffectiveCardPrice, priceFieldFromPrimary } from '../utils/prices'
+import { getEffectiveCardPrice } from '../utils/prices'
 import { formatMoneyInputValue, parseMoneyInputValue } from '../utils/moneyInput'
 import { invalidateCardState, invalidateTcgdexFilterLanguages } from '../utils/queryInvalidation'
 import { buildTradeUpdatePayload, findNewTradeDraftItem, isCashTradeItem, snapshotTradeCard, tradeToDraft } from '../utils/tradeDraft'
@@ -254,9 +254,9 @@ function SelectedPanel({ title, total, children, formatPrice }) {
 }
 
 export default function Trades() {
-  const { t, formatPrice, pricePrimaryField, exchangeRate } = useSettings()
+  const { t, formatPrice, pricePrimaryField, searchPriceSource, usdToEurRate, valuationParams, exchangeRate } = useSettings()
   const queryClient = useQueryClient()
-  const priceField = priceFieldFromPrimary(pricePrimaryField)
+  const priceField = pricePrimaryField
   const [tab, setTab] = useState('live')
   const [partnerName, setPartnerName] = useState('')
   const [tradeDate, setTradeDate] = useState(today())
@@ -326,7 +326,7 @@ export default function Trades() {
   }, [customCards, incomingSearch, searchResults])
 
   const addOutgoing = (collectionItem) => {
-    const price = getEffectiveCardPrice(collectionItem.card, collectionItem.variant, priceField)
+    const price = getEffectiveCardPrice(collectionItem.card, collectionItem.variant, priceField, searchPriceSource, usdToEurRate)
     setOutgoing(prev => {
       // A copy added while editing is a new trade item with today's price.
       // Only merge it into another newly-added draft row, never a historical one.
@@ -363,7 +363,7 @@ export default function Trades() {
     const variant = getDefaultVariantOrNull(card) || 'Normal'
     const condition = 'NM'
     const lang = card.lang || card._lang || 'en'
-    const price = getEffectiveCardPrice(card, variant, priceField)
+    const price = getEffectiveCardPrice(card, variant, priceField, searchPriceSource, usdToEurRate)
     setIncoming(prev => {
       // Keep new copies separate from historical rows so their current value
       // is snapshotted independently by the update endpoint.
@@ -461,7 +461,7 @@ export default function Trades() {
           notes: item.notes || null,
         }
       }),
-    }, { price_field: priceField }),
+    }, valuationParams),
     onSuccess: () => {
       toast.success(t('trades.saved'))
       resetDraft()
@@ -483,7 +483,7 @@ export default function Trades() {
       incomingCash,
       outgoing,
       incoming,
-    }, exchangeRate), { price_field: priceField }),
+    }, exchangeRate), valuationParams),
     onSuccess: () => {
       toast.success(t('common.saved'))
       resetDraft()
@@ -580,7 +580,7 @@ export default function Trades() {
                       card={item.card}
                       variant={item.variant}
                       meta={`${item.variant} - ${item.condition} - ${t('common.quantity')}: ${item.quantity}`}
-                      value={formatPrice(getEffectiveCardPrice(item.card, item.variant, priceField))}
+                      value={formatPrice(getEffectiveCardPrice(item.card, item.variant, priceField, searchPriceSource, usdToEurRate))}
                       rightAction={
                         <button onClick={() => addOutgoing(item)} className="btn-ghost p-2" aria-label={t('common.add')}>
                           <Plus size={15} />
@@ -641,7 +641,7 @@ export default function Trades() {
                       card={card}
                       variant={getDefaultVariantOrNull(card)}
                       meta={card.is_custom ? t('cardSearch.customCard') : cardSubtitle(card)}
-                      value={formatPrice(getEffectiveCardPrice(card, getDefaultVariantOrNull(card), priceField))}
+                      value={formatPrice(getEffectiveCardPrice(card, getDefaultVariantOrNull(card), priceField, searchPriceSource, usdToEurRate))}
                       rightAction={
                         <button onClick={() => addIncomingCard(card)} className="btn-ghost p-2" aria-label={t('common.add')}>
                           <Plus size={15} />

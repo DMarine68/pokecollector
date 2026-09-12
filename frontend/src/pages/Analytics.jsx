@@ -156,7 +156,7 @@ function AddExpenseModal({ onClose, onSuccess }) {
 }
 
 export default function Analytics() {
-  const { t, formatPrice, pricePrimaryField, currencySymbol, settings } = useSettings()
+  const { t, formatPrice, valuationParams, currencySymbol, settings } = useSettings()
   const [moversPeriod, setMoversPeriod] = useState('7d')
   const [moversSort, setMoversSort] = useState('percentage')
   const [activeTab, setActiveTab] = useState('duplicates')
@@ -184,24 +184,24 @@ export default function Analytics() {
   }, [selectedCard?.card_id, selectedOwnPhotoDefault])
   const queryClient = useQueryClient()
   const { data: duplicates = [], isLoading: dupLoading } = useQuery({
-    queryKey: ['duplicates', pricePrimaryField],
-    queryFn: () => getDuplicates({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['duplicates', valuationParams],
+    queryFn: () => getDuplicates(valuationParams).then(r => r.data),
   })
 
   const moversDay = PERIOD_DAYS[moversPeriod] || 7
   const { data: topMovers = [], isLoading: moversLoading } = useQuery({
-    queryKey: ['top-movers', moversDay, pricePrimaryField, moversSort],
-    queryFn: () => getTopMovers(moversDay, { price_field: pricePrimaryField, sort_by: moversSort }).then(r => r.data),
+    queryKey: ['top-movers', moversDay, valuationParams, moversSort],
+    queryFn: () => getTopMovers(moversDay, { ...valuationParams, sort_by: moversSort }).then(r => r.data),
   })
 
   const { data: rarityStats = [], isLoading: rarityLoading } = useQuery({
-    queryKey: ['rarity-stats', pricePrimaryField],
-    queryFn: () => getRarityStats({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['rarity-stats', valuationParams],
+    queryFn: () => getRarityStats(valuationParams).then(r => r.data),
   })
 
   const { data: investmentData = [], isLoading: investLoading } = useQuery({
-    queryKey: ['investment-tracker', pricePrimaryField],
-    queryFn: () => getInvestmentTracker({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['investment-tracker', valuationParams],
+    queryFn: () => getInvestmentTracker(valuationParams).then(r => r.data),
   })
 
   const { data: tradeStats = null } = useQuery({
@@ -210,8 +210,8 @@ export default function Analytics() {
   })
 
   const { data: products = [] } = useQuery({
-    queryKey: ['products', pricePrimaryField],
-    queryFn: () => getProducts({ price_field: pricePrimaryField }).then(r => r.data),
+    queryKey: ['products', valuationParams],
+    queryFn: () => getProducts(valuationParams).then(r => r.data),
   })
 
   const { data: newSets = [] } = useQuery({

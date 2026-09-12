@@ -57,10 +57,9 @@ def cleanup_product_image_cache_if_unreferenced(db, image_url: str | None) -> No
     if not image_url:
         return
 
-    from models import ImageCache, ProductPurchase
+    from models import ProductPurchase
+    from services.image_disk_cache import purge_keys
 
     _lock_product_image_url(db, image_url)
     if db.query(ProductPurchase.id).filter(ProductPurchase.image_url == image_url).first() is None:
-        db.query(ImageCache).filter(
-            ImageCache.image_key == product_image_cache_key(image_url)
-        ).delete(synchronize_session=False)
+        purge_keys(db, [product_image_cache_key(image_url)])

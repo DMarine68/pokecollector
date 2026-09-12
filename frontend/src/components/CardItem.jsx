@@ -403,7 +403,7 @@ export const CardItem = memo(function CardItem({ card, showActions = true, onAdd
   const [showEditModal, setShowEditModal] = useState(false)
   const [clonedCard, setClonedCard] = useState(null)
   const [modalTab, setModalTab] = useState('overview')
-  const { t, pricePrimary, pricePrimaryField, formatPrice } = useSettings()
+  const { t, pricePrimary, pricePrimaryField, searchPriceSource, usdToEurRate, formatPrice } = useSettings()
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const ownsCustomCard = Boolean(
@@ -432,8 +432,8 @@ export const CardItem = memo(function CardItem({ card, showActions = true, onAdd
     },
   })
 
-  const cardImage = card.images?.small || resolveCardImageUrl(card) || (card.image ? `${card.image}/low.webp` : null)
-  const selectedPrice = getEffectiveCardPrice(card, null, pricePrimaryField)
+  const cardImage = resolveCardImageUrl(card)
+  const selectedPrice = getEffectiveCardPrice(card, null, pricePrimaryField, searchPriceSource, usdToEurRate)
   const price = selectedPrice > 0
     ? selectedPrice
     : (getPriceValue(card, pricePrimary)
@@ -561,7 +561,7 @@ export function CardModal({ card, onClose, onEdit, defaultLang = 'en', ownedItem
   const [customImageVersion, setCustomImageVersion] = useState(0)
   const [localOwnedItems, setLocalOwnedItems] = useState(() => ownedItems || card.owned_items || [])
   const customImageInputId = useId()
-  const { t, formatPrice, formatUsdPrice, pricePrimary, pricePrimaryField, exchangeRate, exchangeRateReady } = useSettings()
+  const { t, formatPrice, formatUsdPrice, pricePrimary, pricePrimaryField, searchPriceSource, usdToEurRate, exchangeRate, exchangeRateReady } = useSettings()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
@@ -606,11 +606,6 @@ export function CardModal({ card, onClose, onEdit, defaultLang = 'en', ownedItem
     : null
   const manualImageProxyUrl = card.is_custom ? resolveCardImageUrl(card, 'large') : null
   const cardImage = manualImageProxyUrl
-    || card?.images?.large
-    || card?.images_large
-    || (card?.image ? `${card.image}/high.webp` : null)
-    || card?.images?.small
-    || card?.images_small
     || customImageProxyUrl
     || resolveCardImageUrl(card, 'large')
     || resolveCardImageUrl(card)
@@ -741,7 +736,7 @@ export function CardModal({ card, onClose, onEdit, defaultLang = 'en', ownedItem
     card.price_tcg_holo_market != null ? { key: 'tcg-holo', val: card.price_tcg_holo_market, label: 'Holo' } : null,
   ].filter(Boolean)
 
-  const effectivePrimaryPrice = getEffectiveCardPrice(card, variant, pricePrimaryField)
+  const effectivePrimaryPrice = getEffectiveCardPrice(card, variant, pricePrimaryField, searchPriceSource, usdToEurRate)
   const selectedPrimaryPrice = effectivePrimaryPrice > 0 ? effectivePrimaryPrice : getPriceValue(card, pricePrimary)
   const historyPriceField = ['price_market', 'price_trend', 'price_low'].includes(pricePrimaryField) ? pricePrimaryField : 'price_market'
   const historyDataKey = historyPriceField
@@ -885,7 +880,7 @@ export function CardModal({ card, onClose, onEdit, defaultLang = 'en', ownedItem
             )}
 
             {activeTab === 'prices' && (
-              <CardPricesTab card={card} variant={variant} />
+              <CardPricesTab key={card.id} card={card} variant={variant} />
             )}
             <div className="space-y-3">
               {activeTab === 'owned' && ownedQuantity > 0 && (

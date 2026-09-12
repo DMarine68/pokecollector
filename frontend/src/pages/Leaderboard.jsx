@@ -35,7 +35,7 @@ function TrainerAvatar({ avatarId, username }) {
 
 export default function Leaderboard() {
   const navigate = useNavigate()
-  const { t, formatPrice, pricePrimaryField } = useSettings()
+  const { t, formatPrice, valuationParams } = useSettings()
   const { multiUser, user: currentUser } = useAuth()
   const [sortBy, setSortBy] = useState('total_value')
   const [selectedCard, setSelectedCard] = useState(null)
@@ -45,8 +45,8 @@ export default function Leaderboard() {
   ]
 
   const { data = [], isLoading, error } = useQuery({
-    queryKey: ['leaderboard', pricePrimaryField],
-    queryFn: () => getLeaderboard({ price_field: pricePrimaryField }).then((response) => response.data),
+    queryKey: ['leaderboard', valuationParams],
+    queryFn: () => getLeaderboard(valuationParams).then((response) => response.data),
   })
 
   const rows = useMemo(() => {

@@ -48,9 +48,9 @@ function compareCardIdentity(a, b) {
     || String(a.id || '').localeCompare(String(b.id || ''))
 }
 
-function compareCardPrice(a, b, priceField, direction = 'asc') {
-  const priceA = getEffectiveCardPrice(a, null, priceField) || Number.POSITIVE_INFINITY
-  const priceB = getEffectiveCardPrice(b, null, priceField) || Number.POSITIVE_INFINITY
+function compareCardPrice(a, b, priceField, direction = 'asc', priceSource, usdToEur) {
+  const priceA = getEffectiveCardPrice(a, null, priceField, priceSource, usdToEur) || Number.POSITIVE_INFINITY
+  const priceB = getEffectiveCardPrice(b, null, priceField, priceSource, usdToEur) || Number.POSITIVE_INFINITY
   const missingA = !Number.isFinite(priceA)
   const missingB = !Number.isFinite(priceB)
 
@@ -67,7 +67,7 @@ export default function PokedexSpecies() {
   const goBack = useDetailBackNavigation('pokedex', '/pokedex')
   useScrollToTopOnPush()
   const [searchParams] = useSearchParams()
-  const { t, settings, pricePrimary, pricePrimaryField } = useSettings()
+  const { t, settings, pricePrimary, pricePrimaryField, searchPriceSource, usdToEurRate } = useSettings()
   const language = settings.language === 'de' ? 'de' : 'en'
   const [cardLanguage, setCardLanguage] = useState('all')
   const [cardSort, setCardSort] = useState('price_asc')
@@ -101,19 +101,19 @@ export default function PokedexSpecies() {
   const cards = useMemo(() => {
     const rows = cardsQuery.data?.data || []
     return [...rows].sort((a, b) => {
-      if (cardSort === 'price_desc') return compareCardPrice(a, b, pricePrimaryField, 'desc')
+      if (cardSort === 'price_desc') return compareCardPrice(a, b, pricePrimaryField, 'desc', searchPriceSource, usdToEurRate)
       if (cardSort === 'owned_first') {
         if (Boolean(a.owned) !== Boolean(b.owned)) return a.owned ? -1 : 1
-        return compareCardPrice(a, b, pricePrimaryField)
+        return compareCardPrice(a, b, pricePrimaryField, 'asc', searchPriceSource, usdToEurRate)
       }
       if (cardSort === 'wishlist_first') {
         if (Boolean(a.wishlisted) !== Boolean(b.wishlisted)) return a.wishlisted ? -1 : 1
-        return compareCardPrice(a, b, pricePrimaryField)
+        return compareCardPrice(a, b, pricePrimaryField, 'asc', searchPriceSource, usdToEurRate)
       }
       if (cardSort === 'set_number') return compareCardIdentity(a, b)
-      return compareCardPrice(a, b, pricePrimaryField)
+      return compareCardPrice(a, b, pricePrimaryField, 'asc', searchPriceSource, usdToEurRate)
     })
-  }, [cardsQuery.data, cardSort, pricePrimaryField])
+  }, [cardsQuery.data, cardSort, pricePrimaryField, searchPriceSource, usdToEurRate])
 
   if (isReturningToPokedex) {
     return <div className="fixed inset-0 z-40 bg-bg" aria-hidden="true" />
