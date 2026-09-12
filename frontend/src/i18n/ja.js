@@ -859,6 +859,7 @@ const ja = {
     cardmarketTitle: 'Cardmarket 価格',
     pricechartingLoading: 'PriceChartingを読み込み中…',
     salesVolumeYear: '過去1年で{count}件売却',
+    soldListings: '{count}件売却',
   },
 
   // Set Detail

@@ -857,6 +857,7 @@ const th = {
     cardmarketTitle: 'ราคา Cardmarket',
     pricechartingLoading: 'กำลังโหลด PriceCharting…',
     salesVolumeYear: 'ขายได้ {count} ใบในปีที่แล้ว',
+    soldListings: 'ขายแล้ว {count} ใบ',
   },
 
   // Set Detail

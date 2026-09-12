@@ -859,6 +859,7 @@ const ru = {
     cardmarketTitle: 'Цены Cardmarket',
     pricechartingLoading: 'Загрузка PriceCharting…',
     salesVolumeYear: '{count} продаж за последний год',
+    soldListings: '{count} продаж',
   },
 
   // Set Detail

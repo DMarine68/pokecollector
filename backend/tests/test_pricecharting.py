@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from services.pricecharting import (
+    _overlay_missing_grade_prices,
+    _payload_from_pricecharting_html,
     _payload_from_pricecharting_product,
     _pick_pricecharting_product,
     _product_page_url,
@@ -69,7 +71,8 @@ class TestPriceCharting(unittest.TestCase):
         card.price_market = 14.0
         card.price_trend = 14.5
 
-        data = get_card_pricecharting_data(db, current_user, card)
+        with patch("services.pricecharting.resolve_pricecharting_api_token", return_value=""):
+            data = get_card_pricecharting_data(db, current_user, card)
         self.assertEqual(data["card_id"], "test-card-1")
         self.assertEqual(data["card_name"], "Pikachu")
         self.assertEqual(data["ungraded"], 15.0)
@@ -303,6 +306,163 @@ class TestPriceCharting(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(payload["ungraded"], 18.47)
         self.assertIsNone(payload["psa_10"])
+
+
+MISTY_VITALITY_PRICE_TABLE_HTML = """
+<table id="price_data">
+  <tr>
+    <td id="used_price">
+      <span class="price js-price">$18.47</span>
+      <span class="change"><span class="js-price">$1.62</span></span>
+    </td>
+    <td id="complete_price"><span class="price js-price">-</span></td>
+    <td id="new_price"><span class="price js-price">-</span></td>
+    <td id="graded_price">
+      <span class="price js-price" title="current value in Graded condition">$62.50</span>
+      <span class="change"><span class="js-price">$0.00</span></span>
+    </td>
+    <td id="box_only_price">
+      <span class="price js-price">$69.00</span>
+    </td>
+    <td id="manual_only_price">
+      <span class="price js-price">$184.34</span>
+      <span class="change">&#43;<span class="js-price">$1.84</span></span>
+    </td>
+  </tr>
+</table>
+<select id="completed-auctions-condition">
+  <option value="completed-auctions-used">Ungraded (60)</option>
+  <option value="completed-auctions-cib">Grade 7 (0)</option>
+  <option value="completed-auctions-new">Grade 8 (0)</option>
+  <option value="completed-auctions-graded">Grade 9 (2)</option>
+  <option value="completed-auctions-box-only">Grade 9.5 (0)</option>
+  <option value="completed-auctions-manual-only">PSA 10 (0)</option>
+</select>
+<table>
+  <tr><td class="date">2026-07-07</td></tr>
+  <tr><td class="date">2026-09-08</td></tr>
+</table>
+"""
+
+
+class TestPriceChartingHtmlFallback(unittest.TestCase):
+    def test_payload_from_pricecharting_html_reads_public_grade_table(self):
+        payload = _payload_from_pricecharting_html(MISTY_VITALITY_PRICE_TABLE_HTML)
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertIsNone(payload["grade_7"])
+        self.assertIsNone(payload["grade_8"])
+        self.assertEqual(payload["grade_9"], 62.50)
+        self.assertEqual(payload["grade_9_5"], 69.00)
+        self.assertEqual(payload["psa_10"], 184.34)
+        self.assertEqual(payload["sold_listings"], {
+            "ungraded": 60,
+            "grade_7": 0,
+            "grade_8": 0,
+            "grade_9": 2,
+            "grade_9_5": 0,
+            "psa_10": 0,
+        })
+        self.assertEqual(payload["sold_listings_from"], "2026-07-07")
+        self.assertEqual(payload["sold_listings_to"], "2026-09-08")
+
+    def test_overlay_missing_grade_prices_keeps_api_ungraded(self):
+        merged = _overlay_missing_grade_prices(
+            {"ungraded": 18.47, "grade_9": None, "psa_10": None, "has_live_data": True},
+            {"ungraded": 18.01, "grade_9": 62.50, "psa_10": 184.34},
+        )
+        self.assertEqual(merged["ungraded"], 18.47)
+        self.assertEqual(merged["grade_9"], 62.50)
+        self.assertEqual(merged["psa_10"], 184.34)
+
+    def test_overlay_missing_grade_prices_copies_sold_listings(self):
+        merged = _overlay_missing_grade_prices(
+            {"ungraded": 18.47, "has_live_data": True},
+            {"sold_listings": {"ungraded": 60, "grade_9": 2}},
+        )
+        self.assertEqual(merged["sold_listings"]["ungraded"], 60)
+        self.assertEqual(merged["sold_listings"]["grade_9"], 2)
+
+    def test_fetch_pricecharting_api_reads_product_page_when_api_omits_grades(self):
+        calls = []
+
+        def fake_http_get(url, headers, timeout):
+            calls.append(url)
+            if "/api/products?" in url:
+                return json.dumps({
+                    "status": "success",
+                    "products": [{
+                        "id": "13644131",
+                        "product-name": "Misty's Vitality #111",
+                        "console-name": "Pokemon Pitch Black",
+                        "loose-price": 1847,
+                    }],
+                })
+            if "/api/product?" in url:
+                return json.dumps({
+                    "status": "success",
+                    "id": "13644131",
+                    "product-name": "Misty's Vitality #111",
+                    "console-name": "Pokemon Pitch Black",
+                    "loose-price": 1847,
+                })
+            if "/game/pokemon-pitch-black/" in url:
+                return MISTY_VITALITY_PRICE_TABLE_HTML
+            raise AssertionError(url)
+
+        with patch("services.pricecharting._http_get", side_effect=fake_http_get):
+            payload = fetch_pricecharting_api(
+                "token",
+                "Misty's Vitality",
+                "111",
+                set_name="Pitch Black",
+            )
+
+        self.assertEqual(len(calls), 3)
+        self.assertIn("/api/products?", calls[0])
+        self.assertIn("/api/product?", calls[1])
+        self.assertIn("/game/pokemon-pitch-black/", calls[2])
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertEqual(payload["grade_9"], 62.50)
+        self.assertEqual(payload["grade_9_5"], 69.00)
+        self.assertEqual(payload["psa_10"], 184.34)
+        self.assertEqual(payload["sold_listings"]["ungraded"], 60)
+        self.assertEqual(payload["sold_listings"]["grade_9"], 2)
+
+    def test_fetch_pricecharting_api_skips_product_page_when_api_has_grades(self):
+        calls = []
+
+        def fake_http_get(url, headers, timeout):
+            calls.append(url)
+            if "/api/products?" in url:
+                return json.dumps({
+                    "status": "success",
+                    "products": [{
+                        "id": "13644131",
+                        "product-name": "Misty's Vitality #111",
+                        "console-name": "Pokemon Pitch Black",
+                        "loose-price": 1847,
+                    }],
+                })
+            if "/api/product?" in url:
+                return json.dumps({
+                    "status": "success",
+                    "id": "13644131",
+                    "product-name": "Misty's Vitality #111",
+                    "console-name": "Pokemon Pitch Black",
+                    "loose-price": 1847,
+                    "cib-price": 0,
+                    "new-price": 0,
+                    "graded-price": 6250,
+                    "box-only-price": 6900,
+                    "manual-only-price": 18434,
+                })
+            raise AssertionError(url)
+
+        with patch("services.pricecharting._http_get", side_effect=fake_http_get):
+            payload = fetch_pricecharting_api("token", "Misty's Vitality", "111")
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(payload["psa_10"], 184.34)
 
 
 if __name__ == "__main__":

@@ -859,6 +859,7 @@ const ko = {
     cardmarketTitle: 'Cardmarket 가격',
     pricechartingLoading: 'PriceCharting 불러오는 중…',
     salesVolumeYear: '지난 1년 {count}건 판매',
+    soldListings: '{count}건 판매',
   },
 
   // Set Detail

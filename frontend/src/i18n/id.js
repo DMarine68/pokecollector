@@ -859,6 +859,7 @@ const id = {
     cardmarketTitle: 'Harga Cardmarket',
     pricechartingLoading: 'Memuat PriceCharting…',
     salesVolumeYear: '{count} terjual dalam setahun terakhir',
+    soldListings: '{count} terjual',
   },
 
   // Set Detail
