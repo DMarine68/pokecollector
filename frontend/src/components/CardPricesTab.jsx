@@ -28,6 +28,17 @@ import { cardmarketLinks } from '../utils/cardmarket'
 const ALL_PRICE_KEYS = ['trend', 'avg', 'avg1', 'avg7', 'avg30', 'low']
 const ALL_HOLO_PRICE_KEYS = ['trend-holo', 'avg-holo', 'avg1-holo', 'avg7-holo', 'avg30-holo', 'low-holo']
 
+function formatSoldListingDate(isoDate) {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 const PRICE_FIELD_MAP = {
   avg: 'price_market',
   market: 'price_market',
@@ -364,6 +375,11 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
                     {t('prices.multiplier', { mult: grade.multiplier }).replace('{mult}', grade.multiplier)}
                   </span>
                 ) : null}
+                {!grade.loading && Number.isFinite(grade.sold_listings) ? (
+                  <span className="mt-1 block text-[10px] font-semibold text-text-muted">
+                    {t('prices.soldListings', { count: grade.sold_listings })}
+                  </span>
+                ) : null}
               </div>
             )
           })}
@@ -371,6 +387,16 @@ export default function CardPricesTab({ card, variant = 'Normal', collectionItem
         {!isLoadingPricecharting && Number.isFinite(pricechartingForCard?.sales_volume_year) ? (
           <p className="text-[11px] font-semibold text-text-secondary">
             {t('prices.salesVolumeYear', { count: pricechartingForCard.sales_volume_year })}
+          </p>
+        ) : null}
+        {!isLoadingPricecharting && pricechartingForCard?.grades?.some(grade => Number.isFinite(grade.sold_listings)) ? (
+          <p className="text-[11px] font-semibold text-text-secondary">
+            {formatSoldListingDate(pricechartingForCard.sold_listings_from) && formatSoldListingDate(pricechartingForCard.sold_listings_to)
+              ? t('prices.soldListingsRange', {
+                from: formatSoldListingDate(pricechartingForCard.sold_listings_from),
+                to: formatSoldListingDate(pricechartingForCard.sold_listings_to),
+              })
+              : t('prices.soldListingsNote')}
           </p>
         ) : null}
       </div>

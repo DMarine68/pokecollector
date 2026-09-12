@@ -859,6 +859,7 @@ const es = {
     cardmarketTitle: 'Precios de Cardmarket',
     pricechartingLoading: 'Cargando PriceCharting…',
     salesVolumeYear: '{count} vendidas en el último año',
+    soldListings: '{count} vendidas',
   },
 
   // Set Detail

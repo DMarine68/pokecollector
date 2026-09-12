@@ -857,6 +857,7 @@ const nl = {
     cardmarketTitle: 'Cardmarket Prijzen',
     pricechartingLoading: 'PriceCharting laden…',
     salesVolumeYear: '{count} verkocht in het afgelopen jaar',
+    soldListings: '{count} verkocht',
   },
 
   // Set Detail

@@ -243,6 +243,7 @@ class PriceChartingGrade(BaseModel):
     price: Optional[float] = None
     multiplier: Optional[float] = None
     is_psa10: bool = False
+    sold_listings: Optional[int] = None
 
 
 class PriceChartingResponse(BaseModel):
@@ -263,6 +264,8 @@ class PriceChartingResponse(BaseModel):
     grade_9_5: Optional[float] = None
     psa_10: Optional[float] = None
     sales_volume_year: Optional[int] = None
+    sold_listings_from: Optional[str] = None
+    sold_listings_to: Optional[str] = None
     grades: List[PriceChartingGrade] = Field(default_factory=list)
 
 

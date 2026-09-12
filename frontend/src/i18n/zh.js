@@ -859,6 +859,7 @@ const zh = {
     cardmarketTitle: 'Cardmarket价格',
     pricechartingLoading: '正在加载 PriceCharting…',
     salesVolumeYear: '过去一年售出 {count} 张',
+    soldListings: '售出 {count} 张',
   },
 
   // Set Detail

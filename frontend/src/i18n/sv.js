@@ -850,6 +850,7 @@ const sv = {
     cardmarketTitle: 'Cardmarket-priser',
     pricechartingLoading: 'Laddar PriceCharting…',
     salesVolumeYear: '{count} sålda det senaste året',
+    soldListings: '{count} sålda',
   },
 
   // Set Detail

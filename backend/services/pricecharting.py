@@ -134,6 +134,37 @@ _CARD_GRADE_PRICE_KEYS = (
     "box-only-price",
     "manual-only-price",
 )
+_PAYLOAD_GRADE_KEYS = ("grade_7", "grade_8", "grade_9", "grade_9_5", "psa_10")
+# Public product-page table cells use the video-game IDs for the same card grades.
+_HTML_PRICE_CELL_IDS = (
+    ("used_price", "ungraded"),
+    ("complete_price", "grade_7"),
+    ("new_price", "grade_8"),
+    ("graded_price", "grade_9"),
+    ("box_only_price", "grade_9_5"),
+    ("manual_only_price", "psa_10"),
+)
+_HTML_PRIMARY_PRICE_RE = re.compile(
+    r'<span class="price js-price"[^>]*>(?P<body>.*?)</span>',
+    re.IGNORECASE | re.DOTALL,
+)
+_DOLLAR_AMOUNT_RE = re.compile(
+    r"\$\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)"
+)
+_AUCTION_TAB_TO_GRADE = {
+    "used": "ungraded",
+    "cib": "grade_7",
+    "new": "grade_8",
+    "graded": "grade_9",
+    "box-only": "grade_9_5",
+    "manual-only": "psa_10",
+}
+_SOLD_LISTING_OPTION_RE = re.compile(
+    r'<option value="completed-auctions-(used|cib|new|graded|box-only|manual-only)"[^>]*>'
+    r'[^<]*\((\d+)\)</option>',
+    re.IGNORECASE,
+)
+_SALE_DATE_RE = re.compile(r'<td class="date">(\d{4}-\d{2}-\d{2})</td>')
 
 
 def _product_field(product: Dict[str, Any], key: str) -> Any:
@@ -184,6 +215,133 @@ def _product_page_url(product: Dict[str, Any]) -> Optional[str]:
     if not console or not name:
         return None
     return f"https://www.pricecharting.com/game/{_slugify(console)}/{_slugify(name)}"
+
+
+def _dollars_from_html_price_cell(cell: str) -> Optional[float]:
+    """Read the primary dollar amount from a PriceCharting table cell."""
+    match = _HTML_PRIMARY_PRICE_RE.search(cell or "")
+    if not match:
+        return None
+    text = re.sub(r"<[^>]+>", " ", match.group("body"))
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text or text == "-":
+        return None
+    dollar = _DOLLAR_AMOUNT_RE.search(text)
+    if not dollar:
+        return None
+    try:
+        amount = float(dollar.group(1).replace(",", ""))
+    except ValueError:
+        return None
+    return round(amount, 2) if amount > 0 else None
+
+
+def _sold_listings_from_html(html_text: str) -> Dict[str, int]:
+    """Read completed-sale counts from PriceCharting's sold-listings dropdown."""
+    found: Dict[str, int] = {}
+    for match in _SOLD_LISTING_OPTION_RE.finditer(html_text or ""):
+        key = _AUCTION_TAB_TO_GRADE.get(match.group(1).lower())
+        if not key:
+            continue
+        found[key] = int(match.group(2))
+    return found
+
+
+def _sold_listings_range_from_html(html_text: str) -> tuple[Optional[str], Optional[str]]:
+    """Earliest and latest completed-sale dates shown on the product page."""
+    dates = _SALE_DATE_RE.findall(html_text or "")
+    if not dates:
+        return None, None
+    return min(dates), max(dates)
+
+
+def _payload_from_pricecharting_html(html_text: str) -> Optional[Dict[str, Any]]:
+    """Parse Ungraded / Grade 7–9.5 / PSA 10 from the public product page."""
+    if not html_text:
+        return None
+    prices: Dict[str, Optional[float]] = {}
+    for cell_id, key in _HTML_PRICE_CELL_IDS:
+        match = re.search(
+            rf'<td id="{cell_id}">(?P<cell>.*?)</td>',
+            html_text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        prices[key] = _dollars_from_html_price_cell(match.group("cell")) if match else None
+    ungraded = prices.get("ungraded")
+    if not ungraded:
+        return None
+    sold_listings = _sold_listings_from_html(html_text)
+    sold_from, sold_to = _sold_listings_range_from_html(html_text)
+    return {
+        "source": "pricecharting_api",
+        "has_live_data": True,
+        "is_estimate": False,
+        "ungraded": ungraded,
+        "grade_7": prices.get("grade_7"),
+        "grade_8": prices.get("grade_8"),
+        "grade_9": prices.get("grade_9"),
+        "grade_9_5": prices.get("grade_9_5"),
+        "psa_10": prices.get("psa_10"),
+        "sales_volume_year": None,
+        "sold_listings": sold_listings,
+        "sold_listings_from": sold_from,
+        "sold_listings_to": sold_to,
+        "product_id": None,
+        "product_url": None,
+    }
+
+
+def _payload_has_live_grades(payload: Optional[Dict[str, Any]]) -> bool:
+    if not payload:
+        return False
+    return any(payload.get(key) for key in _PAYLOAD_GRADE_KEYS)
+
+
+def _overlay_missing_grade_prices(
+    base: Optional[Dict[str, Any]],
+    extra: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not extra:
+        return base
+    if not base:
+        return extra
+    merged = dict(base)
+    if not merged.get("ungraded") and extra.get("ungraded"):
+        merged["ungraded"] = extra["ungraded"]
+        merged["has_live_data"] = True
+        merged["is_estimate"] = False
+        merged["source"] = extra.get("source") or merged.get("source")
+    for key in _PAYLOAD_GRADE_KEYS:
+        if merged.get(key) is None and extra.get(key) is not None:
+            merged[key] = extra[key]
+    if merged.get("sales_volume_year") is None and extra.get("sales_volume_year") is not None:
+        merged["sales_volume_year"] = extra["sales_volume_year"]
+    extra_sold = extra.get("sold_listings")
+    if isinstance(extra_sold, dict) and extra_sold and not merged.get("sold_listings"):
+        merged["sold_listings"] = extra_sold
+    if not merged.get("sold_listings_from") and extra.get("sold_listings_from"):
+        merged["sold_listings_from"] = extra["sold_listings_from"]
+    if not merged.get("sold_listings_to") and extra.get("sold_listings_to"):
+        merged["sold_listings_to"] = extra["sold_listings_to"]
+    return merged
+
+
+def _fetch_pricecharting_product_page(url: str, timeout: float) -> Optional[Dict[str, Any]]:
+    if not url:
+        return None
+    try:
+        html_text = _http_get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; Pokecollector/1.0)",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+            timeout=timeout,
+        )
+    except Exception as exc:
+        logger.warning("PriceCharting product page fetch failed for %s: %s", url, exc)
+        return None
+    return _payload_from_pricecharting_html(html_text)
 
 
 def _pick_pricecharting_product(
@@ -279,14 +437,14 @@ def fetch_pricecharting_api(
     timeout: float = 5,
     ungraded_only: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Query PriceCharting API using paid Legendary API token.
+    """Query PriceCharting for ungraded and graded prices.
 
-    ``/api/products`` is used to pick the right card, but search hits often
-    include only identity fields plus ungraded ``loose-price``. Graded columns
-    live on ``/api/product?id=`` (the CSV-equivalent row). Card detail fetches
-    that second URL when grade keys are missing; ungraded-only sync skips it
-    when ``loose-price`` is already present. Both calls share the 1 req/sec
-    throttle.
+    Collector-tier tokens typically return only ``loose-price``. Legendary
+    ``/api/product?id=`` includes the CSV grade columns. When that row is
+    still missing grades, card detail falls back to the public product page
+    (same Ungraded / Grade 9 / 9.5 / PSA 10 table as the website). Ungraded
+    sync skips both the product lookup and the page scrape. All HTTP calls
+    share the 1 req/sec throttle.
     """
     if not api_token:
         return None
@@ -329,7 +487,18 @@ def fetch_pricecharting_api(
             except Exception as exc:
                 logger.warning("PriceCharting product lookup failed for %s: %s", product_id, exc)
 
-        return _payload_from_pricecharting_product(product)
+        payload = _payload_from_pricecharting_product(product)
+        if ungraded_only or _payload_has_live_grades(payload):
+            return payload
+
+        page_url = _product_page_url(product)
+        if not page_url:
+            _, page_url = build_pricecharting_urls(card_name, card_number, set_name)
+        html_payload = _fetch_pricecharting_product_page(page_url, timeout=max(timeout, 8))
+        if html_payload:
+            html_payload["product_id"] = product.get("id")
+            html_payload["product_url"] = page_url
+        return _overlay_missing_grade_prices(payload, html_payload)
     except Exception as e:
         logger.warning("PriceCharting API call failed: %s", e)
         return None
@@ -400,61 +569,32 @@ def get_card_pricecharting_data(
         data = estimate_graded_prices(raw_price)
 
     ungraded_val = data.get("ungraded")
+    sold_listings = data.get("sold_listings") if isinstance(data.get("sold_listings"), dict) else {}
 
     def _calc_mult(val: Optional[float]) -> Optional[float]:
         if val and ungraded_val and ungraded_val > 0:
             return round(val / ungraded_val, 2)
         return None
 
+    def _grade(grade_id: str, name: str, label: str, price: Optional[float], *, is_psa10: bool = False, multiplier: Optional[float] = None) -> Dict[str, Any]:
+        sold = sold_listings.get(grade_id)
+        return {
+            "id": grade_id,
+            "name": name,
+            "label": label,
+            "price": price,
+            "multiplier": multiplier,
+            "is_psa10": is_psa10,
+            "sold_listings": sold if isinstance(sold, int) else None,
+        }
+
     grades = [
-        {
-            "id": "ungraded",
-            "name": "Ungraded",
-            "label": "Raw / NM",
-            "price": data.get("ungraded"),
-            "multiplier": 1.0 if ungraded_val else None,
-            "is_psa10": False,
-        },
-        {
-            "id": "grade_7",
-            "name": "Grade 7",
-            "label": "Near Mint",
-            "price": data.get("grade_7"),
-            "multiplier": _calc_mult(data.get("grade_7")),
-            "is_psa10": False,
-        },
-        {
-            "id": "grade_8",
-            "name": "Grade 8",
-            "label": "NM-Mint",
-            "price": data.get("grade_8"),
-            "multiplier": _calc_mult(data.get("grade_8")),
-            "is_psa10": False,
-        },
-        {
-            "id": "grade_9",
-            "name": "Grade 9",
-            "label": "Mint",
-            "price": data.get("grade_9"),
-            "multiplier": _calc_mult(data.get("grade_9")),
-            "is_psa10": False,
-        },
-        {
-            "id": "grade_9_5",
-            "name": "Grade 9.5",
-            "label": "Gem Mint",
-            "price": data.get("grade_9_5"),
-            "multiplier": _calc_mult(data.get("grade_9_5")),
-            "is_psa10": False,
-        },
-        {
-            "id": "psa_10",
-            "name": "PSA 10",
-            "label": "Gem Mint / Pristine",
-            "price": data.get("psa_10"),
-            "multiplier": _calc_mult(data.get("psa_10")),
-            "is_psa10": True,
-        },
+        _grade("ungraded", "Ungraded", "Raw / NM", data.get("ungraded"), multiplier=1.0 if ungraded_val else None),
+        _grade("grade_7", "Grade 7", "Near Mint", data.get("grade_7"), multiplier=_calc_mult(data.get("grade_7"))),
+        _grade("grade_8", "Grade 8", "NM-Mint", data.get("grade_8"), multiplier=_calc_mult(data.get("grade_8"))),
+        _grade("grade_9", "Grade 9", "Mint", data.get("grade_9"), multiplier=_calc_mult(data.get("grade_9"))),
+        _grade("grade_9_5", "Grade 9.5", "Gem Mint", data.get("grade_9_5"), multiplier=_calc_mult(data.get("grade_9_5"))),
+        _grade("psa_10", "PSA 10", "Gem Mint / Pristine", data.get("psa_10"), is_psa10=True, multiplier=_calc_mult(data.get("psa_10"))),
     ]
 
     result = {
@@ -475,10 +615,18 @@ def get_card_pricecharting_data(
         "grade_9_5": data.get("grade_9_5"),
         "psa_10": data.get("psa_10"),
         "sales_volume_year": data.get("sales_volume_year"),
+        "sold_listings_from": data.get("sold_listings_from"),
+        "sold_listings_to": data.get("sold_listings_to"),
         "grades": grades,
     }
 
-    _PRICECHARTING_CACHE[cache_key] = (now, result)
+    incomplete_live = bool(
+        result.get("has_live_data")
+        and not any(grade.get("price") for grade in grades if grade["id"] != "ungraded")
+        and not any(isinstance(grade.get("sold_listings"), int) for grade in grades)
+    )
+    if not incomplete_live:
+        _PRICECHARTING_CACHE[cache_key] = (now, result)
     if result.get("has_live_data"):
         persist_live_ungraded_price(db, card, result.get("ungraded"), commit=True)
     return result
