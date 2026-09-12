@@ -1,4 +1,5 @@
 import datetime
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,7 @@ from services.pricecharting import (
     clean_card_number,
     enrich_pricecharting_ungraded,
     estimate_graded_prices,
+    fetch_pricecharting_api,
     get_card_pricecharting_data,
     persist_live_ungraded_price,
 )
@@ -27,7 +29,7 @@ class TestPriceCharting(unittest.TestCase):
     def test_build_pricecharting_urls(self):
         search_url, direct_url = build_pricecharting_urls("Misty's Vitality", "111/197", "Pitch Black")
         self.assertIn("search-products?type=prices&q=Misty%27s+Vitality+111", search_url)
-        self.assertEqual(direct_url, "https://www.pricecharting.com/game/pokemon-pitch-black/mistys-vitality-111")
+        self.assertEqual(direct_url, "https://www.pricecharting.com/game/pokemon-pitch-black/misty's-vitality-111")
 
         search_url2, direct_url2 = build_pricecharting_urls("Charizard", "4", "Base Set")
         self.assertIn("Charizard+4", search_url2)
@@ -89,6 +91,41 @@ class TestPriceCharting(unittest.TestCase):
         self.assertEqual(payload["sales_volume_year"], 12)
         self.assertTrue(payload["has_live_data"])
         self.assertIsNone(_payload_from_pricecharting_product({"loose-price": 0}))
+
+    def test_payload_maps_card_grades_from_video_game_fields(self):
+        payload = _payload_from_pricecharting_product({
+            "id": "13644131",
+            "product-name": "Misty's Vitality #111",
+            "console-name": "Pokemon Pitch Black",
+            "loose-price": 1847,
+            "cib-price": 0,
+            "new-price": 0,
+            "graded-price": 6250,
+            "box-only-price": 6900,
+            "manual-only-price": 18434,
+            "sales-volume": 365,
+        })
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertIsNone(payload["grade_7"])
+        self.assertIsNone(payload["grade_8"])
+        self.assertEqual(payload["grade_9"], 62.50)
+        self.assertEqual(payload["grade_9_5"], 69.00)
+        self.assertEqual(payload["psa_10"], 184.34)
+        self.assertEqual(payload["sales_volume_year"], 365)
+        self.assertEqual(
+            payload["product_url"],
+            "https://www.pricecharting.com/game/pokemon-pitch-black/misty's-vitality-111",
+        )
+
+    def test_payload_accepts_underscore_price_keys(self):
+        payload = _payload_from_pricecharting_product({
+            "loose_price": 1847,
+            "graded_price": 6250,
+            "manual_only_price": 18434,
+        })
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertEqual(payload["grade_9"], 62.50)
+        self.assertEqual(payload["psa_10"], 184.34)
 
     def test_persist_live_ungraded_price_ignores_estimates(self):
         db = MagicMock()
@@ -166,6 +203,106 @@ class TestPriceCharting(unittest.TestCase):
             _product_page_url(picked),
             "https://www.pricecharting.com/game/pokemon-base-set/pikachu-25",
         )
+
+    def test_fetch_pricecharting_api_loads_full_product_when_search_omits_grades(self):
+        calls = []
+
+        def fake_http_get(url, headers, timeout):
+            calls.append(url)
+            if "/api/products?" in url:
+                return json.dumps({
+                    "status": "success",
+                    "products": [{
+                        "id": "13644131",
+                        "product-name": "Misty's Vitality #111",
+                        "console-name": "Pokemon Pitch Black",
+                        "loose-price": 1847,
+                    }],
+                })
+            if "/api/product?" in url and "id=13644131" in url:
+                return json.dumps({
+                    "status": "success",
+                    "id": "13644131",
+                    "product-name": "Misty's Vitality #111",
+                    "console-name": "Pokemon Pitch Black",
+                    "loose-price": 1847,
+                    "cib-price": 0,
+                    "new-price": 0,
+                    "graded-price": 6250,
+                    "box-only-price": 6900,
+                    "manual-only-price": 18434,
+                    "sales-volume": 365,
+                })
+            raise AssertionError(url)
+
+        with patch("services.pricecharting._http_get", side_effect=fake_http_get):
+            payload = fetch_pricecharting_api(
+                "token",
+                "Misty's Vitality",
+                "111",
+                set_name="Pitch Black",
+            )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertEqual(payload["grade_9"], 62.50)
+        self.assertEqual(payload["grade_9_5"], 69.00)
+        self.assertEqual(payload["psa_10"], 184.34)
+        self.assertEqual(payload["sales_volume_year"], 365)
+
+    def test_fetch_pricecharting_api_skips_product_lookup_when_grades_present(self):
+        calls = []
+
+        def fake_http_get(url, headers, timeout):
+            calls.append(url)
+            return json.dumps({
+                "status": "success",
+                "products": [{
+                    "id": "13644131",
+                    "product-name": "Misty's Vitality #111",
+                    "console-name": "Pokemon Pitch Black",
+                    "loose-price": 1847,
+                    "cib-price": 0,
+                    "new-price": 0,
+                    "graded-price": 6250,
+                    "box-only-price": 6900,
+                    "manual-only-price": 18434,
+                }],
+            })
+
+        with patch("services.pricecharting._http_get", side_effect=fake_http_get):
+            payload = fetch_pricecharting_api("token", "Misty's Vitality", "111")
+
+        self.assertEqual(len(calls), 1)
+        self.assertIn("/api/products?", calls[0])
+        self.assertEqual(payload["psa_10"], 184.34)
+
+    def test_fetch_pricecharting_api_ungraded_only_skips_second_request(self):
+        calls = []
+
+        def fake_http_get(url, headers, timeout):
+            calls.append(url)
+            return json.dumps({
+                "status": "success",
+                "products": [{
+                    "id": "13644131",
+                    "product-name": "Misty's Vitality #111",
+                    "console-name": "Pokemon Pitch Black",
+                    "loose-price": 1847,
+                }],
+            })
+
+        with patch("services.pricecharting._http_get", side_effect=fake_http_get):
+            payload = fetch_pricecharting_api(
+                "token",
+                "Misty's Vitality",
+                "111",
+                ungraded_only=True,
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(payload["ungraded"], 18.47)
+        self.assertIsNone(payload["psa_10"])
 
 
 if __name__ == "__main__":
