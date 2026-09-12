@@ -62,6 +62,13 @@ export function removeProductBookLine(lines, line) {
   return lines.filter(entry => bookLineKey(entry) !== key)
 }
 
+export function productBookCounts(lines) {
+  return {
+    rows: lines.length,
+    cards: lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0),
+  }
+}
+
 export function productBookMarketValue(lines, priceField = 'price_trend') {
   return lines.reduce((sum, line) => (
     sum + (getEffectiveCardPrice(line.card, line.variant, priceField) * (line.quantity || 0))
@@ -71,11 +78,13 @@ export function productBookMarketValue(lines, priceField = 'price_trend') {
 export function productBookPreview(lines, purchasePrice, priceField = 'price_trend') {
   const market = productBookMarketValue(lines, priceField)
   const cost = Number(purchasePrice) || 0
+  const counts = productBookCounts(lines)
   return {
     market,
     cost,
     pnl: market - cost,
-    count: lines.reduce((sum, line) => sum + (line.quantity || 0), 0),
+    count: counts.cards,
+    rows: counts.rows,
   }
 }
 

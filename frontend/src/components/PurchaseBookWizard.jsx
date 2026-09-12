@@ -12,6 +12,7 @@ import {
   PRODUCT_BOOK_CONDITIONS,
   PRODUCT_BOOK_SELECTION_LIMIT,
   productBookPreview,
+  productBookCounts,
   removeProductBookLine,
   toProductBookCards,
   updateProductBookLine,
@@ -113,6 +114,7 @@ export function PurchaseBookCardPicker({
     enabled: searchQuery.length >= 2,
   })
   const results = data?.data || []
+  const counts = useMemo(() => productBookCounts(lines), [lines])
 
   const addLine = (line) => {
     if (lines.length >= PRODUCT_BOOK_SELECTION_LIMIT && !lines.some(entry => (
@@ -179,7 +181,11 @@ export function PurchaseBookCardPicker({
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">
           <p className="text-sm font-medium text-text-primary">{t('products.bookTitle')}</p>
-          <p className="text-xs text-text-muted">{t('products.selectedCards').replace('{count}', lines.length)}</p>
+          <p className="text-xs text-text-muted">
+            {t('products.selectedBookSummary')
+              .replace('{rows}', counts.rows)
+              .replace('{cards}', counts.cards)}
+          </p>
         </div>
         <div className="max-h-[28vh] divide-y divide-border overflow-y-auto rounded-xl border border-border bg-bg-elevated/30">
           {lines.length ? lines.map(line => (

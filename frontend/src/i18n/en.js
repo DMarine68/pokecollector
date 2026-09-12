@@ -594,6 +594,7 @@ const en = {
     emptyBook: 'No cards in this book yet. Finalize to save a sealed purchase, or add cards first.',
     removeFromBook: 'Remove {card} from the book',
     bookSelectionMaximum: 'Maximum of {limit} book lines.',
+    selectedBookSummary: '{rows} selected · {cards} cards',
     bookPreviewValue: 'Live card value: {value}',
     bookPreviewPnl: 'Estimated P&L: {pnl}',
     addCatalogueCards: 'Add from catalogue',

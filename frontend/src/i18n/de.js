@@ -695,6 +695,7 @@ const de = {
     addedOn: 'Hinzugefügt {date}',
     noCardsInRange: 'Keine verfügbaren Karten entsprechen der Suche oder dem Zeitraum.',
     selectedCards: '{count} ausgewählt',
+    selectedBookSummary: '{rows} ausgewählt · {cards} Karten',
     clearSelection: 'Auswahl leeren',
     linkSelectedCards: 'Ausgewählte verknüpfen',
     cardsLinked: '{count} Sammlungseinträge verknüpft',
